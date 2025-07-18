@@ -15,25 +15,31 @@ def generate_access_token(user_id):
     token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
     return token
 
+from flask import request, jsonify, g
 from functools import wraps
-import jwt
-from flask import request
+from ..models import User
 
-def require_auth(f):
+JWT_SECRET = os.getenv("JWT_SECRET")
+
+def token_required(f):
     @wraps(f)
-    def wrapper(*args, **kwargs):
+    def decorated(*args, **kwargs):
         auth_header = request.headers.get("Authorization")
         if not auth_header or not auth_header.startswith("Bearer "):
-            return {"error": "Missing token"}, 401
+            return jsonify({"error": "Missing or invalid Authorization header"}), 401
 
         token = auth_header.split(" ")[1]
+
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            user = User.query.get(payload["user_id"])
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+            g.current_user = user  # Attach to global context
         except jwt.ExpiredSignatureError:
-            return {"error": "Token expired"}, 401
+            return jsonify({"error": "Token expired"}), 401
         except jwt.InvalidTokenError:
-            return {"error": "Invalid token"}, 401
+            return jsonify({"error": "Invalid token"}), 401
 
-        request.user_id = payload["user_id"]
         return f(*args, **kwargs)
-    return wrapper
+    return decorated

@@ -3,6 +3,7 @@ from flask_cors import CORS
 from backend.models import db
 from backend.routes.api import api_blueprint
 from backend.routes.auth import auth_bp
+from backend.routes.user import user_bp
 from backend.config import Config
 
 def create_app():
@@ -14,5 +15,6 @@ def create_app():
 
     app.register_blueprint(api_blueprint, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(user_bp, url_prefix='/user')
 
     return app
