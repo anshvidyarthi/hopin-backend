@@ -58,8 +58,8 @@ def generate_auth_response(user, profile=None):
         "refresh_token",
         refresh_token,
         httponly=True,
-        samesite="Strict",  # or "Lax"/"None" if needed
-        secure=False         # True in production with HTTPS
+        samesite="None",  # this is needed for cross-origin cookie sharing
+        secure=True       # REQUIRED when SameSite=None
     )
     return response
 
