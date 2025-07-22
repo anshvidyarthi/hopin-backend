@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import db, Ride
+from ..models import db, Ride, RideRequest
 from ..auth.utils import token_required
 from ..driver.utils import validate_ride_payload, serialize_ride_request
 from datetime import datetime
@@ -37,7 +37,7 @@ def offer_ride():
 
     return jsonify({"message": "Ride offered successfully", "ride_id": ride.id})
 
-@driver_bp.route("/my_rides", methods=["GET"])
+@driver_bp.route("/my_scheduled_rides", methods=["GET"])
 @token_required
 def my_rides():
     profile = g.current_user.profile
@@ -45,7 +45,8 @@ def my_rides():
     if not profile.is_driver:
         return jsonify({"error": "Only drivers can view their rides"}), 403
 
-    rides = Ride.query.filter_by(driver_id=profile.id).order_by(Ride.created_at.desc()).all()
+    rides = Ride.query.filter_by(driver_id=profile.id, status="scheduled")\
+                      .order_by(Ride.created_at.desc()).all()
 
     ride_list = []
     for ride in rides:
@@ -62,3 +63,42 @@ def my_rides():
         ride_list.append(ride_dict)
 
     return jsonify({"rides": ride_list})
+
+@driver_bp.route("/ride_request/<request_id>/accept", methods=["POST"])
+@token_required
+def accept_ride_request(request_id):
+    profile = g.current_user.profile
+
+    req = RideRequest.query.get(request_id)
+    if not req:
+        return jsonify({"error": "Ride request not found"}), 404
+
+    if req.ride.driver_id != profile.id:
+        return jsonify({"error": "Unauthorized to modify this request"}), 403
+
+    if req.status != "pending":
+        return jsonify({"error": f"Cannot accept a request in '{req.status}' state"}), 400
+
+    req.status = "accepted"
+    db.session.commit()
+    return jsonify({"message": "Ride request accepted"})
+
+
+@driver_bp.route("/ride_request/<request_id>/reject", methods=["POST"])
+@token_required
+def reject_ride_request(request_id):
+    profile = g.current_user.profile
+
+    req = RideRequest.query.get(request_id)
+    if not req:
+        return jsonify({"error": "Ride request not found"}), 404
+
+    if req.ride.driver_id != profile.id:
+        return jsonify({"error": "Unauthorized to modify this request"}), 403
+
+    if req.status != "pending":
+        return jsonify({"error": f"Cannot reject a request in '{req.status}' state"}), 400
+
+    req.status = "rejected"
+    db.session.commit()
+    return jsonify({"message": "Ride request rejected"})
