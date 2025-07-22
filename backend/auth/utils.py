@@ -2,6 +2,7 @@ import jwt
 import datetime
 import os
 import uuid
+from flask import jsonify, request
 from ..models import db, Session
 from dotenv import load_dotenv
 
@@ -32,6 +33,35 @@ def create_auth_tokens(user):
     db.session.commit()
 
     return access_token, refresh_token
+
+def generate_auth_response(user, profile=None):
+    access_token, refresh_token = create_auth_tokens(user)
+
+    response_body = {
+        "access_token": access_token,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email
+        }
+    }
+
+    if profile:
+        response_body["profile"] = {
+            "id": profile.id,
+            "photo": profile.photo,
+            "phone": profile.phone
+        }
+
+    response = jsonify(response_body)
+    response.set_cookie(
+        "refresh_token",
+        refresh_token,
+        httponly=True,
+        samesite="Strict",  # or "Lax"/"None" if needed
+        secure=False         # True in production with HTTPS
+    )
+    return response
 
 from flask import request, jsonify, g
 from functools import wraps

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
-from ..auth.utils import generate_access_token, create_auth_tokens, token_required
+from ..auth.utils import generate_access_token, generate_auth_response, token_required
 from ..models import db, User, Session, Profile
 import datetime
 
@@ -13,17 +13,7 @@ def login():
     if not user or not check_password_hash(user.password_hash, data["password"]):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    access_token, refresh_token = create_auth_tokens(user)
-
-    response = jsonify({ "access_token": access_token })
-    response.set_cookie(
-    "refresh_token",
-    refresh_token,
-    httponly=True,
-    samesite="Lax",  # or "None" if needed
-    secure=False     # Only use True if you're using HTTPS
-)
-    return response
+    return generate_auth_response(user)
 
 @auth_bp.route("/refresh", methods=["POST"])
 def refresh():
@@ -83,23 +73,7 @@ def signup():
     db.session.add(profile)
     db.session.commit()
 
-    access_token, refresh_token = create_auth_tokens(user)
-
-    response = jsonify({
-        'access_token': access_token,
-        'user': {
-            'id': user.id,
-            'name': user.name,
-            'email': user.email
-        },
-        'profile': {
-            'id': profile.id,
-            'photo': profile.photo,
-            'phone': profile.phone
-        }
-    })
-    response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="Strict")
-    return response
+    return generate_auth_response(user, profile)
 
 @auth_bp.route("/delete", methods=["DELETE"])
 @token_required
