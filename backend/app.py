@@ -18,7 +18,7 @@ def create_app():
     app.register_blueprint(api_blueprint, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(user_bp, url_prefix='/user')
-    app.register_blueprint(rider_bp, url_prefix='rider')
+    app.register_blueprint(rider_bp, url_prefix='/rider')
     app.register_blueprint(driver_bp, url_prefix='/driver')
 
     return app

@@ -37,6 +37,39 @@ def offer_ride():
 
     return jsonify({"message": "Ride offered successfully", "ride_id": ride.id})
 
+@driver_bp.route("/ride/<ride_id>", methods=["PATCH"])
+@token_required
+def update_ride(ride_id):
+    profile = g.current_user.profile
+
+    ride = Ride.query.get(ride_id)
+    if not ride:
+        return jsonify({"error": "Ride not found"}), 404
+
+    if ride.driver_id != profile.id:
+        return jsonify({"error": "Unauthorized to modify this ride"}), 403
+
+    if ride.status != "scheduled":
+        return jsonify({"error": f"Cannot update a ride in '{ride.status}' state"}), 400
+
+    data = request.get_json()
+    allowed_fields = [
+        "start_location", "end_location", "departure_time", "available_seats",
+        "price_per_seat", "pickup_flexibility", "dropoff_flexibility",
+        "is_fixed_pickup", "fixed_pickup_location"
+    ]
+
+    for field in allowed_fields:
+        if field in data:
+            if field == "departure_time":
+                setattr(ride, field, datetime.fromisoformat(data[field]))
+            else:
+                setattr(ride, field, data[field])
+
+    db.session.commit()
+
+    return jsonify({"message": "Ride updated successfully"})
+
 @driver_bp.route("/my_scheduled_rides", methods=["GET"])
 @token_required
 def my_rides():

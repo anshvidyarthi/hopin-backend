@@ -6,6 +6,43 @@ from sqlalchemy import and_
 
 rider_bp = Blueprint("rider", __name__, url_prefix="/rider")
 
+@rider_bp.route("/search_rides", methods=["GET"])
+@token_required
+def search_rides():
+    profile = g.current_user.profile
+    start = request.args.get("from")
+    end = request.args.get("to")
+
+    if not start or not end:
+        return jsonify({"error": "Both 'from' and 'to' parameters are required"}), 400
+
+    rides = Ride.query.filter(
+        and_(
+            Ride.status == "scheduled",
+            Ride.departure_time > datetime.utcnow(),
+            Ride.start_location.ilike(f"%{start}%"),
+            Ride.end_location.ilike(f"%{end}%")
+        )
+    ).order_by(Ride.departure_time.asc()).all()
+
+    results = []
+    for ride in rides:
+        results.append({
+            "ride_id": ride.id,
+            "start_location": ride.start_location,
+            "end_location": ride.end_location,
+            "departure_time": ride.departure_time.isoformat(),
+            "available_seats": ride.available_seats,
+            "price_per_seat": float(ride.price_per_seat),
+            "driver": {
+                "name": ride.driver_profile.name,
+                "photo": ride.driver_profile.photo,
+                "rating": ride.driver_profile.rating
+            }
+        })
+
+    return jsonify({"rides": results})
+
 # GET /rider/my_rides — only accepted ride requests
 @rider_bp.route("/my_pending_rides", methods=["GET"])
 @token_required
