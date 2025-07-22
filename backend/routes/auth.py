@@ -16,7 +16,13 @@ def login():
     access_token, refresh_token = create_auth_tokens(user)
 
     response = jsonify({ "access_token": access_token })
-    response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="Strict")
+    response.set_cookie(
+    "refresh_token",
+    refresh_token,
+    httponly=True,
+    samesite="Lax",  # or "None" if needed
+    secure=False     # Only use True if you're using HTTPS
+)
     return response
 
 @auth_bp.route("/refresh", methods=["POST"])

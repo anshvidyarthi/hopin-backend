@@ -6,13 +6,16 @@ from backend.routes.auth import auth_bp
 from backend.routes.user import user_bp
 from .routes.riders import rider_bp
 from .routes.driver import driver_bp
+import os
 from backend.config import Config
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object('backend.config.Config')
 
-    CORS(app)
+    FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:8080")
+
+    CORS(app, supports_credentials=True, origins=[FRONTEND_ORIGIN])
     db.init_app(app)
 
     app.register_blueprint(api_blueprint, url_prefix='/api')
