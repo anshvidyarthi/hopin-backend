@@ -23,6 +23,10 @@ def offer_ride():
         driver_id=profile.id,
         start_location=data["start_location"],
         end_location=data["end_location"],
+        start_lat=data.get("start_lat"),
+        start_lng=data.get("start_lng"),
+        end_lat=data.get("end_lat"),
+        end_lng=data.get("end_lng"),
         departure_time=datetime.fromisoformat(data["departure_time"]),
         available_seats=data["available_seats"],
         price_per_seat=data["price_per_seat"],
@@ -53,9 +57,12 @@ def update_ride(ride_id):
         return jsonify({"error": f"Cannot update a ride in '{ride.status}' state"}), 400
 
     data = request.get_json()
+
     allowed_fields = [
-        "start_location", "end_location", "departure_time", "available_seats",
-        "price_per_seat", "pickup_flexibility", "dropoff_flexibility",
+        "start_location", "start_lat", "start_lng",
+        "end_location", "end_lat", "end_lng",
+        "departure_time", "available_seats", "price_per_seat",
+        "pickup_flexibility", "dropoff_flexibility",
         "is_fixed_pickup", "fixed_pickup_location"
     ]
 
@@ -67,7 +74,6 @@ def update_ride(ride_id):
                 setattr(ride, field, data[field])
 
     db.session.commit()
-
     return jsonify({"message": "Ride updated successfully"})
 
 @driver_bp.route("/my_scheduled_rides", methods=["GET"])
@@ -86,7 +92,11 @@ def my_rides():
         ride_dict = {
             "id": ride.id,
             "start_location": ride.start_location,
+            "start_lat": ride.start_lat,
+            "start_lng": ride.start_lng,
             "end_location": ride.end_location,
+            "end_lat": ride.end_lat,
+            "end_lng": ride.end_lng,
             "departure_time": ride.departure_time.isoformat(),
             "available_seats": ride.available_seats,
             "price_per_seat": float(ride.price_per_seat),
