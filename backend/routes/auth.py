@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
-from ..auth.utils import generate_access_token, create_auth_tokens
+from ..auth.utils import generate_access_token, create_auth_tokens, token_required
 from ..models import db, User, Session, Profile
 import datetime
 
@@ -94,3 +94,21 @@ def signup():
     })
     response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="Strict")
     return response
+
+@auth_bp.route("/delete", methods=["DELETE"])
+@token_required
+def delete_account():
+    user = g.current_user
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        # Delete all related sessions and profile (via cascade)
+        db.session.delete(user)
+        db.session.commit()
+        response = jsonify({"message": "User account and associated data deleted"})
+        response.set_cookie("refresh_token", "", expires=0)
+        return response
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete account", "details": str(e)}), 500
