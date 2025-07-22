@@ -1,6 +1,8 @@
 import jwt
 import datetime
 import os
+import uuid
+from ..models import db, Session
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +16,22 @@ def generate_access_token(user_id):
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
     return token
+
+def create_auth_tokens(user):
+    access_token = generate_access_token(user.id)
+    refresh_token = str(uuid.uuid4())
+
+    session = Session(
+        user_id=user.id,
+        refresh_token=refresh_token,
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=30),
+        user_agent=request.headers.get('User-Agent'),
+        ip_address=request.remote_addr
+    )
+    db.session.add(session)
+    db.session.commit()
+
+    return access_token, refresh_token
 
 from flask import request, jsonify, g
 from functools import wraps

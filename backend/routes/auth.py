@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
-from ..auth.utils import generate_access_token
+from ..auth.utils import generate_access_token, create_auth_tokens
 from ..models import db, User, Session
 import uuid
 import datetime
@@ -14,19 +14,7 @@ def login():
     if not user or not check_password_hash(user.password_hash, data["password"]):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    access_token = generate_access_token(user.id)
-    refresh_token = str(uuid.uuid4())
-
-    # Save refresh token in DB
-    session = Session(
-        user_id=user.id,
-        refresh_token=refresh_token,
-        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=30),
-        user_agent=request.headers.get('User-Agent'),
-        ip_address=request.remote_addr
-    )
-    db.session.add(session)
-    db.session.commit()
+    access_token, refresh_token = create_auth_tokens(user)
 
     response = jsonify({ "access_token": access_token })
     response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="Strict")
@@ -78,5 +66,15 @@ def signup():
     db.session.add(user)
     db.session.commit()
 
-    token = generate_access_token(user.id)
-    return jsonify({'token': token, 'user': {'id': user.id, 'name': user.name, 'email': user.email}})
+    access_token, refresh_token = create_auth_tokens(user)
+
+    response = jsonify({
+        'access_token': access_token,
+        'user': {
+            'id': user.id,
+            'name': user.name,
+            'email': user.email
+        }
+    })
+    response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="Strict")
+    return response
