@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from ..auth.utils import generate_access_token, create_auth_tokens
-from ..models import db, User, Session
-import uuid
+from ..models import db, User, Session, Profile
 import datetime
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -48,13 +47,16 @@ def logout():
 def signup():
     print("Request headers:", dict(request.headers))
     print("Request origin:", request.headers.get("Origin"))
+
     data = request.get_json()
     email = data.get('email')
     name = data.get('name')
     password = data.get('password')
+    phone = data.get('phone')
+    photo = data.get('photo')
 
-    if not all([email, name, password]):
-        return jsonify({'error': 'Name, email, and password required'}), 400
+    if not all([email, name, password, phone, photo]):
+        return jsonify({'error': 'Name, email, password, phone, and photo are required'}), 400
 
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
@@ -62,8 +64,17 @@ def signup():
 
     hashed_pw = generate_password_hash(password)
     user = User(email=email, name=name, password_hash=hashed_pw)
-
     db.session.add(user)
+    db.session.commit()
+
+    profile = Profile(
+        user_id=user.id,
+        name=name,
+        email=email,
+        phone=phone,
+        photo=photo,
+    )
+    db.session.add(profile)
     db.session.commit()
 
     access_token, refresh_token = create_auth_tokens(user)
@@ -74,6 +85,11 @@ def signup():
             'id': user.id,
             'name': user.name,
             'email': user.email
+        },
+        'profile': {
+            'id': profile.id,
+            'photo': profile.photo,
+            'phone': profile.phone
         }
     })
     response.set_cookie("refresh_token", refresh_token, httponly=True, samesite="Strict")
