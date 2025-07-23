@@ -6,6 +6,7 @@ from backend.routes.auth import auth_bp
 from backend.routes.user import user_bp
 from .routes.riders import rider_bp
 from .routes.driver import driver_bp
+from .routes.validateLicense import validate_bp
 import os
 from backend.config import Config
 
@@ -23,5 +24,6 @@ def create_app():
     app.register_blueprint(user_bp, url_prefix='/user')
     app.register_blueprint(rider_bp, url_prefix='/rider')
     app.register_blueprint(driver_bp, url_prefix='/driver')
+    app.register_blueprint(validate_bp, url_prefix='/validate')
 
     return app

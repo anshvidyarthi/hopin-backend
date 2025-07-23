@@ -1,0 +1,97 @@
+import boto3, os
+from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+import re
+from datetime import datetime
+
+load_dotenv()
+
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name=os.getenv("AWS_REGION")
+)
+
+rekognition = boto3.client(
+    'rekognition',
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    region_name=os.getenv("AWS_REGION")
+)
+
+def upload_image_to_s3(file_obj, filename, user_id: str, user_name: str):
+    bucket = os.getenv("S3_LICENSES_BUCKET_NAME")
+    
+    # Sanitize and format filename components
+    safe_username = secure_filename(user_name)
+    safe_filename = secure_filename(filename)
+    
+    # Compose object key: e.g., licenses/123e4567/user-name_license.png
+    key = f"licenses/{user_id}/{safe_username}_{safe_filename}"
+    
+    # Upload with appropriate headers
+    s3.upload_fileobj(file_obj, bucket, key, ExtraArgs={"ContentType": file_obj.content_type})
+    
+    return f"https://{bucket}.s3.amazonaws.com/{key}"
+
+def analyze_image(bucket, key):
+    response = rekognition.detect_text(Image={"S3Object": {"Bucket": bucket, "Name": key}})
+    return response
+
+def validate_license_fields(detections):
+    if not detections:
+        return {
+            "valid": False,
+            "error": "No text detected in license image",
+            "name": None,
+            "license_number": None,
+            "expiration_date": None,
+        }
+
+    lines = [d["DetectedText"] for d in detections if d["Type"] == "LINE"]
+
+    # Extract FN and LN lines
+    first_name = next((line.replace("FN", "").strip() for line in lines if line.startswith("FN ")), None)
+    last_name = next((line.replace("LN", "").strip() for line in lines if line.startswith("LN ")), None)
+
+    name = f"{first_name} {last_name}" if first_name and last_name else None
+
+    # Extract license number (look for line starting with DL)
+    license_line = next((line for line in lines if line.startswith("DL ")), None)
+    license_number = license_line.split()[-1] if license_line else None
+
+    # Extract expiration date (look for line starting with EXP)
+    expiration_line = next((line for line in lines if line.startswith("EXP ")), None)
+    expiration_date = None
+    if expiration_line:
+        try:
+            expiration_date = datetime.strptime(expiration_line.replace("EXP", "").strip(), "%m/%d/%Y")
+        except ValueError:
+            pass
+
+    if not name or not license_number:
+        return {
+            "valid": False,
+            "error": "Missing required fields: name or license number",
+            "name": name,
+            "license_number": license_number,
+            "expiration_date": expiration_date,
+        }
+
+    if expiration_date and expiration_date < datetime.utcnow():
+        return {
+            "valid": False,
+            "error": "License is expired",
+            "name": name,
+            "license_number": license_number,
+            "expiration_date": expiration_date,
+        }
+
+    return {
+        "valid": True,
+        "error": None,
+        "name": name,
+        "license_number": license_number,
+        "expiration_date": expiration_date,
+    }

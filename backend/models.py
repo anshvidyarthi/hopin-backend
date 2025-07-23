@@ -99,3 +99,18 @@ class Message(db.Model):
     content = db.Column(db.Text, nullable=False)
     read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class License(db.Model):
+    __tablename__ = "licenses"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False, unique=True)
+    document_url = db.Column(db.String(512), nullable=False)
+    full_name = db.Column(db.String(120), nullable=True)
+    license_number = db.Column(db.String(50), nullable=True)
+    expiration_date = db.Column(db.DateTime, nullable=True)
+    validated = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship("User", backref="license", uselist=False)
