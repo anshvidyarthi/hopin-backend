@@ -95,3 +95,14 @@ def validate_license_fields(detections):
         "license_number": license_number,
         "expiration_date": expiration_date,
     }
+
+from difflib import SequenceMatcher
+
+def is_name_match(account_name: str, license_name: str, threshold: float = 0.8) -> bool:
+    """
+    Compare account name to license name using a similarity threshold.
+    """
+    account = account_name.strip().lower()
+    license = license_name.strip().lower()
+    ratio = SequenceMatcher(None, account, license).ratio()
+    return ratio >= threshold

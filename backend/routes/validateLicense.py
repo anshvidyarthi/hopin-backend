@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from ..auth.utils import token_required
 from ..models import db, License, Profile
-from ..driver.upload_license import upload_image_to_s3, analyze_image, validate_license_fields
+from ..driver.upload_license import upload_image_to_s3, analyze_image, validate_license_fields, is_name_match
 import os
 
 validate_bp = Blueprint("validate", __name__, url_prefix="/validate")
@@ -19,21 +19,21 @@ def validate_license():
 
     user = g.current_user
 
-    # Upload image to S3
     s3_url = upload_image_to_s3(file, file.filename, user_id=user.id, user_name=user.name)
-
-    # Prepare Rekognition parameters
     bucket = os.getenv("S3_LICENSES_BUCKET_NAME")
     key = s3_url.split(f"{bucket}.s3.amazonaws.com/")[-1]
 
-    # Analyze image and validate fields
     result = analyze_image(bucket, key)
     validation = validate_license_fields(result.get("TextDetections", []))
 
     if not validation["valid"]:
         return jsonify({"error": validation["error"]}), 400
 
-    # Store license info
+    if not is_name_match(user.name, validation["name"]):
+        return jsonify({
+            "error": f"Name mismatch. License name '{validation['name']}' does not match account name '{user.name}'."
+        }), 400
+
     license = License(
         user_id=user.id,
         license_number=validation["license_number"],
@@ -44,7 +44,6 @@ def validate_license():
     )
     db.session.add(license)
 
-    # Mark user as a driver
     profile = Profile.query.filter_by(user_id=user.id).first()
     if profile:
         profile.is_driver = True
