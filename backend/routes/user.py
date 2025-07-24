@@ -62,11 +62,19 @@ def update_profile():
 
     data = request.get_json()
 
-    # Only update provided fields
-    for field in ["name", "email", "photo", "rating", "total_rides", "is_driver", "phone"]:
+    # Fields to update in both Profile and User if provided
+    shared_fields = ["name", "email"]
+
+    for field in shared_fields:
+        if field in data:
+            setattr(profile, field, data[field])
+            setattr(user, field, data[field])
+
+    # Fields only in Profile
+    for field in ["photo", "rating", "total_rides", "is_driver", "phone"]:
         if field in data:
             setattr(profile, field, data[field])
 
     db.session.commit()
 
-    return jsonify({"message": "Profile updated"})
+    return jsonify({"message": "Profile and user updated successfully"})
