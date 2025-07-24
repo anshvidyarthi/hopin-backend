@@ -1,47 +1,76 @@
 from flask import Blueprint, request, jsonify, g
-from ..models import db, Ride, RideRequest
-from ..auth.utils import token_required
 from datetime import datetime
 from sqlalchemy import and_
+from ..models import db, Ride, RideRequest
+from ..auth.utils import token_required
 
 rider_bp = Blueprint("rider", __name__, url_prefix="/rider")
+
+
+def serialize_point(use_driver: bool, loc, lat, lng):
+    return {
+        "use_driver": use_driver,
+        "location": loc,
+        "lat": lat,
+        "lng": lng,
+    }
+
+
+def serialize_search_ride(ride: Ride, me_profile_id: str):
+    """Return a ride row plus info for UX locking."""
+    my_req = RideRequest.query.filter_by(rider_id=me_profile_id, ride_id=ride.id).first()
+    my_status = my_req.status if my_req else None
+
+    is_own = ride.driver_id == me_profile_id
+
+    return {
+        "ride_id": ride.id,
+        "start_location": ride.start_location,
+        "end_location": ride.end_location,
+        "departure_time": ride.departure_time.isoformat(),
+        "available_seats": ride.available_seats,
+        "price_per_seat": float(ride.price_per_seat),
+        "status": ride.status,
+        "driver": {
+            "id": ride.driver_profile.id,
+            "name": ride.driver_profile.name,
+            "photo": ride.driver_profile.photo,
+            "rating": ride.driver_profile.rating,
+            "total_rides": ride.driver_profile.total_rides,
+        },
+        "driver_id": ride.driver_id,
+        "my_request_status": my_status,  # null | pending | accepted | rejected | declined
+        "is_own_ride": is_own,
+        "can_request": (not is_own) and (my_status is None) and ride.available_seats > 0 and ride.status not in ("full",),
+    }
+
 
 @rider_bp.route("/search_rides", methods=["GET"])
 @token_required
 def search_rides():
-    _ = g.current_user.profile
+    profile = g.current_user.profile
     start = request.args.get("from")
     end = request.args.get("to")
 
     if not start or not end:
         return jsonify({"error": "Both 'from' and 'to' parameters are required"}), 400
 
-    rides = Ride.query.filter(
-        and_(
-            Ride.status == "scheduled",
-            Ride.departure_time > datetime.utcnow(),
-            Ride.start_location.ilike(f"%{start}%"),
-            Ride.end_location.ilike(f"%{end}%")
+    rides = (
+        Ride.query.filter(
+            and_(
+                Ride.departure_time > datetime.utcnow(),
+                Ride.start_location.ilike(f"%{start}%"),
+                Ride.end_location.ilike(f"%{end}%"),
+                Ride.status.in_(["available", "scheduled"]),
+            )
         )
-    ).order_by(Ride.departure_time.asc()).all()
+        .order_by(Ride.departure_time.asc())
+        .all()
+    )
 
-    results = []
-    for ride in rides:
-        results.append({
-            "ride_id": ride.id,
-            "start_location": ride.start_location,
-            "end_location": ride.end_location,
-            "departure_time": ride.departure_time.isoformat(),
-            "available_seats": ride.available_seats,
-            "price_per_seat": float(ride.price_per_seat),
-            "driver": {
-                "name": ride.driver_profile.name,
-                "photo": ride.driver_profile.photo,
-                "rating": ride.driver_profile.rating
-            }
-        })
-
+    results = [serialize_search_ride(r, profile.id) for r in rides]
     return jsonify({"rides": results})
+
 
 @rider_bp.route("/my_pending_rides", methods=["GET"])
 @token_required
@@ -49,12 +78,11 @@ def my_pending_rides():
     profile = g.current_user.profile
 
     accepted_requests = (
-        RideRequest.query
-        .join(Ride)
+        RideRequest.query.join(Ride)
         .filter(
             RideRequest.rider_id == profile.id,
             RideRequest.status == "accepted",
-            Ride.departure_time > datetime.utcnow()
+            Ride.departure_time > datetime.utcnow(),
         )
         .all()
     )
@@ -62,31 +90,33 @@ def my_pending_rides():
     rides = []
     for req in accepted_requests:
         ride = req.ride
-        rides.append({
-            "ride_id": ride.id,
-            "start_location": ride.start_location,
-            "end_location": ride.end_location,
-            "departure_time": ride.departure_time.isoformat(),
-            "price_per_seat": float(ride.price_per_seat),
-            "status": ride.status,
-            "driver": {
-                "name": ride.driver_profile.name,
-                "phone": ride.driver_profile.phone,
-                "photo": ride.driver_profile.photo
-            },
-            "pickup": {
-                "use_driver": req.use_driver_pickup,
-                "location": req.rider_pickup_location,
-                "lat": req.rider_pickup_lat,
-                "lng": req.rider_pickup_lng,
-            },
-            "dropoff": {
-                "use_driver": req.use_driver_dropoff,
-                "location": req.rider_dropoff_location,
-                "lat": req.rider_dropoff_lat,
-                "lng": req.rider_dropoff_lng,
-            },
-        })
+        rides.append(
+            {
+                "ride_id": ride.id,
+                "start_location": ride.start_location,
+                "end_location": ride.end_location,
+                "departure_time": ride.departure_time.isoformat(),
+                "price_per_seat": float(ride.price_per_seat),
+                "status": ride.status,
+                "driver": {
+                    "name": ride.driver_profile.name,
+                    "phone": ride.driver_profile.phone,
+                    "photo": ride.driver_profile.photo,
+                },
+                "pickup": serialize_point(
+                    req.use_driver_pickup,
+                    req.rider_pickup_location,
+                    req.rider_pickup_lat,
+                    req.rider_pickup_lng,
+                ),
+                "dropoff": serialize_point(
+                    req.use_driver_dropoff,
+                    req.rider_dropoff_location,
+                    req.rider_dropoff_lat,
+                    req.rider_dropoff_lng,
+                ),
+            }
+        )
 
     return jsonify({"rides": rides})
 
@@ -98,33 +128,34 @@ def my_ride_requests():
 
     pending_requests = RideRequest.query.filter(
         RideRequest.rider_id == profile.id,
-        RideRequest.status != "accepted"
     ).all()
 
     requests = []
     for req in pending_requests:
         ride = req.ride
-        requests.append({
-            "request_id": req.id,
-            "ride_id": ride.id,
-            "start_location": ride.start_location,
-            "end_location": ride.end_location,
-            "departure_time": ride.departure_time.isoformat(),
-            "status": req.status,
-            "driver_name": ride.driver_profile.name,
-            "pickup": {
-                "use_driver": req.use_driver_pickup,
-                "location": req.rider_pickup_location,
-                "lat": req.rider_pickup_lat,
-                "lng": req.rider_pickup_lng,
-            },
-            "dropoff": {
-                "use_driver": req.use_driver_dropoff,
-                "location": req.rider_dropoff_location,
-                "lat": req.rider_dropoff_lat,
-                "lng": req.rider_dropoff_lng,
-            },
-        })
+        requests.append(
+            {
+                "request_id": req.id,
+                "ride_id": ride.id,
+                "start_location": ride.start_location,
+                "end_location": ride.end_location,
+                "departure_time": ride.departure_time.isoformat(),
+                "status": req.status,
+                "driver_name": ride.driver_profile.name,
+                "pickup": serialize_point(
+                    req.use_driver_pickup,
+                    req.rider_pickup_location,
+                    req.rider_pickup_lat,
+                    req.rider_pickup_lng,
+                ),
+                "dropoff": serialize_point(
+                    req.use_driver_dropoff,
+                    req.rider_dropoff_location,
+                    req.rider_dropoff_lat,
+                    req.rider_dropoff_lng,
+                ),
+            }
+        )
 
     return jsonify({"requests": requests})
 
@@ -143,6 +174,10 @@ def send_ride_request():
     if not ride:
         return jsonify({"error": "Ride not found"}), 404
 
+    if ride.driver_id == profile.id:
+        return jsonify({"error": "You cannot request your own ride"}), 403
+
+    # Prevent duplicates
     existing = RideRequest.query.filter_by(rider_id=profile.id, ride_id=ride.id).first()
     if existing:
         return jsonify({"error": "You have already requested this ride"}), 409
@@ -170,10 +205,15 @@ def send_ride_request():
         rider_drop_lat = ride.end_lat
         rider_drop_lng = ride.end_lng
 
+    # Validate custom points
     if not use_driver_pickup and not rider_pick_loc:
-        return jsonify({"error": "rider_pickup_location required if not using driver pickup"}), 400
+        return jsonify(
+            {"error": "rider_pickup_location required if not using driver pickup"}
+        ), 400
     if not use_driver_dropoff and not rider_drop_loc:
-        return jsonify({"error": "rider_dropoff_location required if not using driver dropoff"}), 400
+        return jsonify(
+            {"error": "rider_dropoff_location required if not using driver dropoff"}
+        ), 400
 
     req = RideRequest(
         rider_id=profile.id,

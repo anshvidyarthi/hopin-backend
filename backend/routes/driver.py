@@ -1,19 +1,20 @@
 from flask import Blueprint, request, jsonify, g
+from flask_cors import cross_origin
+from datetime import datetime
 from ..models import db, Ride, RideRequest
 from ..auth.utils import token_required
 from ..driver.utils import validate_ride_payload, serialize_ride_request
-from datetime import datetime
 
-driver_bp = Blueprint('driver', __name__, url_prefix='/driver')
+driver_bp = Blueprint("driver", __name__, url_prefix="/driver")
 
 @driver_bp.route("/offer_ride", methods=["POST"])
 @token_required
 def offer_ride():
-    data = request.get_json()
+    data = request.get_json() or {}
     profile = g.current_user.profile
 
-    if not profile.is_driver:
-        return jsonify({"error": "Only drivers can offer rides"}), 403
+    # if not profile.is_driver:
+    #     return jsonify({"error": "Only drivers can offer rides"}), 403
 
     valid, error = validate_ride_payload(data)
     if not valid:
@@ -33,13 +34,15 @@ def offer_ride():
         pickup_flexibility=data.get("pickup_flexibility", 0),
         dropoff_flexibility=data.get("dropoff_flexibility", 0),
         is_fixed_pickup=data.get("is_fixed_pickup", False),
-        fixed_pickup_location=data.get("fixed_pickup_location")
+        fixed_pickup_location=data.get("fixed_pickup_location"),
+        status=data.get("status", "available")  # let backend default if you prefer
     )
 
     db.session.add(ride)
     db.session.commit()
 
-    return jsonify({"message": "Ride offered successfully", "ride_id": ride.id})
+    return jsonify({"message": "Ride offered successfully", "ride_id": ride.id}), 201
+
 
 @driver_bp.route("/ride/<ride_id>", methods=["PATCH"])
 @token_required
@@ -53,17 +56,14 @@ def update_ride(ride_id):
     if ride.driver_id != profile.id:
         return jsonify({"error": "Unauthorized to modify this ride"}), 403
 
-    if ride.status != "scheduled":
-        return jsonify({"error": f"Cannot update a ride in '{ride.status}' state"}), 400
-
-    data = request.get_json()
+    data = request.get_json() or {}
 
     allowed_fields = [
         "start_location", "start_lat", "start_lng",
         "end_location", "end_lat", "end_lng",
         "departure_time", "available_seats", "price_per_seat",
         "pickup_flexibility", "dropoff_flexibility",
-        "is_fixed_pickup", "fixed_pickup_location"
+        "is_fixed_pickup", "fixed_pickup_location", "status"
     ]
 
     for field in allowed_fields:
@@ -76,16 +76,20 @@ def update_ride(ride_id):
     db.session.commit()
     return jsonify({"message": "Ride updated successfully"})
 
-@driver_bp.route("/my_scheduled_rides", methods=["GET"])
+@driver_bp.route("/my_scheduled_rides", methods=["GET", "OPTIONS"])
+@cross_origin(supports_credentials=True)
 @token_required
 def my_rides():
     profile = g.current_user.profile
 
-    if not profile.is_driver:
-        return jsonify({"error": "Only drivers can view their rides"}), 403
+    # if not profile.is_driver:
+    #     return jsonify({"error": "Only drivers can view their rides"}), 403
 
-    rides = Ride.query.filter_by(driver_id=profile.id, status="scheduled")\
-                      .order_by(Ride.created_at.desc()).all()
+    rides = (
+        Ride.query.filter_by(driver_id=profile.id)
+        .order_by(Ride.created_at.desc())
+        .all()
+    )
 
     ride_list = []
     for ride in rides:
@@ -101,7 +105,7 @@ def my_rides():
             "available_seats": ride.available_seats,
             "price_per_seat": float(ride.price_per_seat),
             "status": ride.status,
-            "requests": [serialize_ride_request(req) for req in ride.ride_requests]
+            "requests": [serialize_ride_request(req) for req in ride.ride_requests],
         }
         ride_list.append(ride_dict)
 
