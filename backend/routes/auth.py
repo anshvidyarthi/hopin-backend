@@ -49,10 +49,9 @@ def signup():
     name = data.get('name')
     password = data.get('password')
     phone = data.get('phone')
-    photo = data.get('photo')
 
-    if not all([email, name, password, phone, photo]):
-        return jsonify({'error': 'Name, email, password, phone, and photo are required'}), 400
+    if not all([email, name, password, phone]):
+        return jsonify({'error': 'Name, email, password, and phone number are required'}), 400
 
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
@@ -68,7 +67,6 @@ def signup():
         name=name,
         email=email,
         phone=phone,
-        photo=photo,
     )
     db.session.add(profile)
     db.session.commit()
