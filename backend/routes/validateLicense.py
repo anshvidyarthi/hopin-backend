@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from ..auth.utils import token_required
 from ..models import db, License, Profile
-from ..driver.upload_license import upload_image_to_s3, analyze_image, validate_license_fields, is_name_match
+from ..driver.upload_license import upload_license_to_s3, analyze_image, validate_license_fields, is_name_match
 import os
 
 validate_bp = Blueprint("validate", __name__, url_prefix="/validate")
@@ -19,7 +19,7 @@ def validate_license():
 
     user = g.current_user
 
-    s3_url = upload_image_to_s3(file, file.filename, user_id=user.id, user_name=user.name)
+    s3_url = upload_license_to_s3(file, file.filename, user_id=user.id, user_name=user.name)
     bucket = os.getenv("S3_LICENSES_BUCKET_NAME")
     key = s3_url.split(f"{bucket}.s3.amazonaws.com/")[-1]
 

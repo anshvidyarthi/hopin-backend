@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from ..auth.utils import generate_access_token, generate_auth_response, token_required
 from ..models import db, User, Session, Profile
+from ..user.upload_image import upload_profile_photo_to_s3
 import datetime
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -41,34 +42,42 @@ def logout():
 
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
-    print("Request headers:", dict(request.headers))
-    print("Request origin:", request.headers.get("Origin"))
+    email = request.form.get('email')
+    name = request.form.get('name')
+    password = request.form.get('password')
+    phone = request.form.get('phone')
+    photo_file = request.files.get('photo')  # this is the actual uploaded file
 
-    data = request.get_json()
-    email = data.get('email')
-    name = data.get('name')
-    password = data.get('password')
-    phone = data.get('phone')
-    photo = data.get('photo')
-
-    if not all([email, name, password, phone, photo]):
+    # Validate required fields
+    if not all([email, name, password, phone, photo_file]):
         return jsonify({'error': 'Name, email, password, phone, and photo are required'}), 400
 
+    # Check for duplicate user
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
         return jsonify({'error': 'User already exists'}), 409
 
+    # Create user
     hashed_pw = generate_password_hash(password)
     user = User(email=email, name=name, password_hash=hashed_pw)
     db.session.add(user)
     db.session.commit()
 
+    # Upload profile photo to S3
+    try:
+        photo_url = upload_profile_photo_to_s3(photo_file, photo_file.filename, user.id, user.name)
+    except Exception as e:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'error': 'Failed to upload profile photo', 'details': str(e)}), 500
+
+    # Create profile
     profile = Profile(
         user_id=user.id,
         name=name,
         email=email,
         phone=phone,
-        photo=photo,
+        photo=photo_url,
     )
     db.session.add(profile)
     db.session.commit()

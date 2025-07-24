@@ -1,17 +1,9 @@
 import boto3, os
-from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
-import re
 from datetime import datetime
+from ..user.upload_image import upload_file_to_s3
 
 load_dotenv()
-
-s3 = boto3.client(
-    's3',
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION")
-)
 
 rekognition = boto3.client(
     'rekognition',
@@ -20,20 +12,15 @@ rekognition = boto3.client(
     region_name=os.getenv("AWS_REGION")
 )
 
-def upload_image_to_s3(file_obj, filename, user_id: str, user_name: str):
-    bucket = os.getenv("S3_LICENSES_BUCKET_NAME")
-    
-    # Sanitize and format filename components
-    safe_username = secure_filename(user_name)
-    safe_filename = secure_filename(filename)
-    
-    # Compose object key: e.g., licenses/123e4567/user-name_license.png
-    key = f"licenses/{user_id}/{safe_username}_{safe_filename}"
-    
-    # Upload with appropriate headers
-    s3.upload_fileobj(file_obj, bucket, key, ExtraArgs={"ContentType": file_obj.content_type})
-    
-    return f"https://{bucket}.s3.amazonaws.com/{key}"
+def upload_license_to_s3(file_obj, filename, user_id: str, user_name: str):
+    return upload_file_to_s3(
+        file_obj=file_obj,
+        filename=filename,
+        user_id=user_id,
+        user_name=user_name,
+        bucket_env_var="S3_LICENSES_BUCKET_NAME",
+        folder="licenses"
+    )
 
 def analyze_image(bucket, key):
     response = rekognition.detect_text(Image={"S3Object": {"Bucket": bucket, "Name": key}})
