@@ -13,8 +13,8 @@ def offer_ride():
     data = request.get_json() or {}
     profile = g.current_user.profile
 
-    # if not profile.is_driver:
-    #     return jsonify({"error": "Only drivers can offer rides"}), 403
+    if not profile.is_driver:
+        return jsonify({"error": "Only drivers can offer rides"}), 403
 
     valid, error = validate_ride_payload(data)
     if not valid:
@@ -82,8 +82,8 @@ def update_ride(ride_id):
 def my_rides():
     profile = g.current_user.profile
 
-    # if not profile.is_driver:
-    #     return jsonify({"error": "Only drivers can view their rides"}), 403
+    if not profile.is_driver:
+        return jsonify({"error": "Only drivers can view their rides"}), 403
 
     rides = (
         Ride.query.filter_by(driver_id=profile.id)
