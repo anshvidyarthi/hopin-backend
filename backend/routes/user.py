@@ -7,11 +7,7 @@ user_bp = Blueprint("user", __name__, url_prefix="/user")
 @user_bp.route("/profile", methods=["GET"])
 @token_required
 def get_profile():
-    user = g.current_user
-    profile = Profile.query.filter_by(user_id=user.id).first()
-
-    if not profile:
-        return jsonify({"error": "Profile not found"}), 404
+    profile = g.current_user
 
     return jsonify({
         "id": profile.id,
@@ -26,45 +22,16 @@ def get_profile():
         "updated_at": profile.updated_at.isoformat() if profile.updated_at else None
     })
 
-@user_bp.route("/profile", methods=["POST"])
-@token_required
-def create_profile():
-    user = g.current_user
-
-    if Profile.query.filter_by(user_id=user.id).first():
-        return jsonify({"error": "Profile already exists"}), 409
-
-    data = request.get_json()
-    profile = Profile(
-        user_id=user.id,
-        name=data.get("name"),
-        email=data.get("email"),
-        photo=data.get("photo"),
-        rating=data.get("rating", 0.0),
-        total_rides=data.get("total_rides", 0),
-        is_driver=data.get("is_driver", False),
-        phone=data.get("phone")
-    )
-
-    db.session.add(profile)
-    db.session.commit()
-
-    return jsonify({"message": "Profile created", "profile_id": profile.id}), 201
-
 @user_bp.route("/profile", methods=["PATCH"])
 @token_required
 def update_profile():
-    user = g.current_user
-    profile = Profile.query.filter_by(user_id=user.id).first()
-
-    if not profile:
-        return jsonify({"error": "Profile not found"}), 404
+    profile = g.current_user
+    user = profile.user  # access the related User object
 
     data = request.get_json()
 
     # Fields to update in both Profile and User if provided
     shared_fields = ["name", "email"]
-
     for field in shared_fields:
         if field in data:
             setattr(profile, field, data[field])

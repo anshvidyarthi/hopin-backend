@@ -11,7 +11,7 @@ s3 = boto3.client(
 def upload_file_to_s3(
     file_obj,
     filename,
-    user_id: str,
+    profile_id: str,
     user_name: str,
     bucket_env_var: str,
     folder: str,
@@ -23,7 +23,7 @@ def upload_file_to_s3(
     safe_username = secure_filename(user_name)
     safe_filename = secure_filename(filename)
 
-    key = f"{folder}/{user_id}/{safe_username}_{safe_filename}"
+    key = f"{folder}/{profile_id}/{safe_username}_{safe_filename}"
 
     extra_args = {"ContentType": file_obj.content_type}
 
@@ -31,11 +31,11 @@ def upload_file_to_s3(
 
     return f"https://{bucket}.s3.amazonaws.com/{key}"
 
-def upload_profile_photo_to_s3(file_obj, filename, user_id: str, user_name: str):
+def upload_profile_photo_to_s3(file_obj, filename, profile_id: str, user_name: str):
     return upload_file_to_s3(
         file_obj=file_obj,
         filename=filename,
-        user_id=user_id,
+        profile_id=profile_id,
         user_name=user_name,
         bucket_env_var="S3_PROFILE_PHOTOS_BUCKET_NAME",
         folder="profile-photos",

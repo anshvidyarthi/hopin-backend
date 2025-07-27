@@ -13,7 +13,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
 
     # Relationships
-    sessions = db.relationship("Session", backref="user", lazy=True, cascade="all, delete")
+    sessions = db.relationship("Session", back_populates="user", lazy=True, cascade="all, delete")
     profile = db.relationship("Profile", backref="user", uselist=False, cascade="all, delete")
 
 class Session(db.Model):
@@ -26,6 +26,7 @@ class Session(db.Model):
     expires_at = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(days=30))
     user_agent = db.Column(db.String(512))
     ip_address = db.Column(db.String(64))
+    user = db.relationship("User", back_populates="sessions")
 
 class Profile(db.Model):
     __tablename__ = "profiles"
@@ -104,7 +105,7 @@ class License(db.Model):
     __tablename__ = "licenses"
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(db.String(36), db.ForeignKey("users.id"), nullable=False, unique=True)
+    profile_id = db.Column(db.String(36), db.ForeignKey("profiles.id"), nullable=False, unique=True)
     document_url = db.Column(db.String(512), nullable=False)
     full_name = db.Column(db.String(120), nullable=True)
     license_number = db.Column(db.String(50), nullable=True)
@@ -113,4 +114,4 @@ class License(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = db.relationship("User", backref="license", uselist=False)
+    profile = db.relationship("Profile", backref="license", uselist=False)

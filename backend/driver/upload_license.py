@@ -12,11 +12,11 @@ rekognition = boto3.client(
     region_name=os.getenv("AWS_REGION")
 )
 
-def upload_license_to_s3(file_obj, filename, user_id: str, user_name: str):
+def upload_license_to_s3(file_obj, filename, profile_id: str, user_name: str):
     return upload_file_to_s3(
         file_obj=file_obj,
         filename=filename,
-        user_id=user_id,
+        profile_id=profile_id,
         user_name=user_name,
         bucket_env_var="S3_LICENSES_BUCKET_NAME",
         folder="licenses"

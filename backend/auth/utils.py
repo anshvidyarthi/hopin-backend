@@ -2,24 +2,28 @@ import jwt
 import datetime
 import os
 import uuid
-from flask import jsonify, request
-from ..models import db, Session
+from flask import jsonify, request, g
+from functools import wraps
 from dotenv import load_dotenv
+from ..models import db, Session, User, Profile
 
 load_dotenv()
 JWT_SECRET = os.getenv('JWT_SECRET')
 JWT_EXP_DELTA_SECONDS = 3600  # 1 hour
 
-def generate_access_token(user_id):
+
+def generate_access_token(profile_id):
     payload = {
-        'user_id': user_id,
+        'profile_id': profile_id,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(seconds=JWT_EXP_DELTA_SECONDS)
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm='HS256')
     return token
 
+
 def create_auth_tokens(user):
-    access_token = generate_access_token(user.id)
+    profile = user.profile
+    access_token = generate_access_token(profile.id)
     refresh_token = str(uuid.uuid4())
 
     session = Session(
@@ -34,40 +38,49 @@ def create_auth_tokens(user):
 
     return access_token, refresh_token
 
+
 def generate_auth_response(user, profile=None):
+    if not profile:
+        profile = user.profile
+
     access_token, refresh_token = create_auth_tokens(user)
 
     response_body = {
         "access_token": access_token,
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email
-        }
-    }
-
-    if profile:
-        response_body["profile"] = {
+        "profile": {
             "id": profile.id,
+            "name": profile.name,
+            "email": profile.email,
             "photo": profile.photo,
             "phone": profile.phone
         }
+    }
 
     response = jsonify(response_body)
     response.set_cookie(
         "refresh_token",
         refresh_token,
         httponly=True,
-        samesite="None",  # this is needed for cross-origin cookie sharing
-        secure=True       # REQUIRED when SameSite=None
+        samesite="None",
+        secure=True
     )
     return response
 
-from flask import request, jsonify, g
-from functools import wraps
-from ..models import User
 
-JWT_SECRET = os.getenv("JWT_SECRET")
+def verify_jwt_token_for_socket(token):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        profile_id = payload.get("profile_id")
+        if not profile_id:
+            return None
+        profile = Profile.query.get(profile_id)
+        return {"id": profile.id} if profile else None
+    except jwt.ExpiredSignatureError:
+        print("Socket token expired.")
+    except jwt.InvalidTokenError:
+        print("Invalid socket token.")
+    return None
+
 
 def token_required(f):
     @wraps(f)
@@ -80,10 +93,10 @@ def token_required(f):
 
         try:
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-            user = User.query.get(payload["user_id"])
-            if not user:
+            profile = Profile.query.get(payload["profile_id"])
+            if not profile:
                 return jsonify({"error": "User not found"}), 404
-            g.current_user = user  # Attach to global context
+            g.current_user = profile
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token expired"}), 401
         except jwt.InvalidTokenError:

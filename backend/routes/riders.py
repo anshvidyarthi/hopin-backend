@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime
 from sqlalchemy import and_
-from ..models import db, Ride, RideRequest
+from ..models import db, Ride, RideRequest, Message
 from ..auth.utils import token_required
 
 rider_bp = Blueprint("rider", __name__, url_prefix="/rider")
@@ -48,7 +48,7 @@ def serialize_search_ride(ride: Ride, me_profile_id: str):
 @rider_bp.route("/search_rides", methods=["GET"])
 @token_required
 def search_rides():
-    profile = g.current_user.profile
+    profile = g.current_user
     start = request.args.get("from")
     end = request.args.get("to")
 
@@ -75,7 +75,7 @@ def search_rides():
 @rider_bp.route("/my_pending_rides", methods=["GET"])
 @token_required
 def my_pending_rides():
-    profile = g.current_user.profile
+    profile = g.current_user
 
     accepted_requests = (
         RideRequest.query.join(Ride)
@@ -124,7 +124,7 @@ def my_pending_rides():
 @rider_bp.route("/ride_requests", methods=["GET"])
 @token_required
 def my_ride_requests():
-    profile = g.current_user.profile
+    profile = g.current_user
 
     pending_requests = RideRequest.query.filter(
         RideRequest.rider_id == profile.id,
@@ -164,7 +164,7 @@ def my_ride_requests():
 @token_required
 def send_ride_request():
     data = request.get_json() or {}
-    profile = g.current_user.profile
+    profile = g.current_user
 
     ride_id = data.get("ride_id")
     if not ride_id:
@@ -177,7 +177,6 @@ def send_ride_request():
     if ride.driver_id == profile.id:
         return jsonify({"error": "You cannot request your own ride"}), 403
 
-    # Prevent duplicates
     existing = RideRequest.query.filter_by(rider_id=profile.id, ride_id=ride.id).first()
     if existing:
         return jsonify({"error": "You have already requested this ride"}), 409
@@ -205,16 +204,12 @@ def send_ride_request():
         rider_drop_lat = ride.end_lat
         rider_drop_lng = ride.end_lng
 
-    # Validate custom points
     if not use_driver_pickup and not rider_pick_loc:
-        return jsonify(
-            {"error": "rider_pickup_location required if not using driver pickup"}
-        ), 400
+        return jsonify({"error": "rider_pickup_location required if not using driver pickup"}), 400
     if not use_driver_dropoff and not rider_drop_loc:
-        return jsonify(
-            {"error": "rider_dropoff_location required if not using driver dropoff"}
-        ), 400
+        return jsonify({"error": "rider_dropoff_location required if not using driver dropoff"}), 400
 
+    # Create ride request
     req = RideRequest(
         rider_id=profile.id,
         ride_id=ride.id,
@@ -229,8 +224,19 @@ def send_ride_request():
         rider_dropoff_lat=rider_drop_lat,
         rider_dropoff_lng=rider_drop_lng,
     )
-
     db.session.add(req)
+
+    # Create initial message
+    initial_msg = data.get("message", "").strip()
+    if initial_msg:
+        msg = Message(
+            ride_id=ride.id,
+            sender_id=profile.id,
+            receiver_id=ride.driver_id,
+            content=initial_msg
+        )
+        db.session.add(msg)
+
     db.session.commit()
 
     return jsonify({"message": "Ride request sent", "request_id": req.id}), 201

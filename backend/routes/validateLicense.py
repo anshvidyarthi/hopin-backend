@@ -17,25 +17,24 @@ def validate_license():
     if file.content_type not in allowed_types:
         return jsonify({"error": "Unsupported file type. Please upload a JPG or PNG image."}), 400
 
-    user = g.current_user
+    profile = g.current_user
 
-    s3_url = upload_license_to_s3(file, file.filename, user_id=user.id, user_name=user.name)
+    s3_url = upload_license_to_s3(file, file.filename, profile_id=profile.id, user_name=profile.name)
     bucket = os.getenv("S3_LICENSES_BUCKET_NAME")
     key = s3_url.split(f"{bucket}.s3.amazonaws.com/")[-1]
-
     result = analyze_image(bucket, key)
     validation = validate_license_fields(result.get("TextDetections", []))
 
     if not validation["valid"]:
         return jsonify({"error": validation["error"]}), 400
 
-    if not is_name_match(user.name, validation["name"]):
+    if not is_name_match(profile.name, validation["name"]):
         return jsonify({
-            "error": f"Name mismatch. License name '{validation['name']}' does not match account name '{user.name}'."
+            "error": f"Name mismatch. License name '{validation['name']}' does not match account name '{profile.name}'."
         }), 400
 
     license = License(
-        user_id=user.id,
+        profile_id=profile.id,
         license_number=validation["license_number"],
         full_name=validation["name"],
         document_url=s3_url,
@@ -44,12 +43,7 @@ def validate_license():
     )
     db.session.add(license)
 
-    profile = Profile.query.filter_by(user_id=user.id).first()
-    if profile:
-        profile.is_driver = True
-    else:
-        return jsonify({"error": "User profile not found"}), 404
-
+    profile.is_driver = True
     db.session.commit()
 
     return jsonify({

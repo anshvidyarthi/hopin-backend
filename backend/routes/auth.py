@@ -1,3 +1,4 @@
+import uuid
 from flask import Blueprint, request, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from ..auth.utils import generate_access_token, generate_auth_response, token_required
@@ -26,7 +27,13 @@ def refresh():
     if not session or session.expires_at < datetime.datetime.utcnow():
         return jsonify({"error": "Invalid or expired refresh token"}), 401
 
-    access_token = generate_access_token(session.user_id)
+    # Get the user's profile
+    profile = session.user.profile
+
+    if not profile:
+        return jsonify({"error": "Associated profile not found"}), 404
+
+    access_token = generate_access_token(profile.id)
     return jsonify({ "access_token": access_token })
 
 @auth_bp.route("/logout", methods=["POST"])
@@ -46,38 +53,40 @@ def signup():
     name = request.form.get('name')
     password = request.form.get('password')
     phone = request.form.get('phone')
-    photo_file = request.files.get('photo')  # this is the actual uploaded file
+    photo_file = request.files.get('photo')
 
-    # Validate required fields
     if not all([email, name, password, phone, photo_file]):
         return jsonify({'error': 'Name, email, password, phone, and photo are required'}), 400
 
-    # Check for duplicate user
     existing_user = User.query.filter_by(email=email).first()
     if existing_user:
         return jsonify({'error': 'User already exists'}), 409
 
-    # Create user
+    # Step 1: Create user
     hashed_pw = generate_password_hash(password)
     user = User(email=email, name=name, password_hash=hashed_pw)
     db.session.add(user)
     db.session.commit()
 
-    # Upload profile photo to S3
+    # Step 2: Pre-generate profile ID (needed for S3 pathing)
+    profile_id = str(uuid.uuid4())
+
+    # Step 3: Upload profile photo to S3 using profile_id
     try:
-        photo_url = upload_profile_photo_to_s3(photo_file, photo_file.filename, user.id, user.name)
+        photo_url = upload_profile_photo_to_s3(photo_file, photo_file.filename, profile_id, name)
     except Exception as e:
         db.session.delete(user)
         db.session.commit()
         return jsonify({'error': 'Failed to upload profile photo', 'details': str(e)}), 500
 
-    # Create profile
+    # Step 4: Create profile using same ID
     profile = Profile(
+        id=profile_id,            # use the manually generated UUID
         user_id=user.id,
         name=name,
         email=email,
         phone=phone,
-        photo=photo_url,
+        photo=photo_url
     )
     db.session.add(profile)
     db.session.commit()
@@ -87,13 +96,13 @@ def signup():
 @auth_bp.route("/delete", methods=["DELETE"])
 @token_required
 def delete_account():
-    user = g.current_user
-    if not user:
+    profile = g.current_user
+    if not profile:
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
         # Delete all related sessions and profile (via cascade)
-        db.session.delete(user)
+        db.session.delete(profile)
         db.session.commit()
         response = jsonify({"message": "User account and associated data deleted"})
         response.set_cookie("refresh_token", "", expires=0)

@@ -11,7 +11,7 @@ driver_bp = Blueprint("driver", __name__, url_prefix="/driver")
 @token_required
 def offer_ride():
     data = request.get_json() or {}
-    profile = g.current_user.profile
+    profile = g.current_user
 
     if not profile.is_driver:
         return jsonify({"error": "Only drivers can offer rides"}), 403
@@ -47,7 +47,7 @@ def offer_ride():
 @driver_bp.route("/ride/<ride_id>", methods=["PATCH"])
 @token_required
 def update_ride(ride_id):
-    profile = g.current_user.profile
+    profile = g.current_user
 
     ride = Ride.query.get(ride_id)
     if not ride:
@@ -80,7 +80,7 @@ def update_ride(ride_id):
 @cross_origin(supports_credentials=True)
 @token_required
 def my_rides():
-    profile = g.current_user.profile
+    profile = g.current_user
 
     if not profile.is_driver:
         return jsonify({"error": "Only drivers can view their rides"}), 403
@@ -114,7 +114,7 @@ def my_rides():
 @driver_bp.route("/ride_request/<request_id>/accept", methods=["POST"])
 @token_required
 def accept_ride_request(request_id):
-    profile = g.current_user.profile
+    profile = g.current_user
 
     req = RideRequest.query.get(request_id)
     if not req:
@@ -134,7 +134,7 @@ def accept_ride_request(request_id):
 @driver_bp.route("/ride_request/<request_id>/reject", methods=["POST"])
 @token_required
 def reject_ride_request(request_id):
-    profile = g.current_user.profile
+    profile = g.current_user
 
     req = RideRequest.query.get(request_id)
     if not req:
