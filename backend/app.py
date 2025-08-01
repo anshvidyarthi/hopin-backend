@@ -19,7 +19,8 @@ def create_app():
 
     FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:8080")
 
-    CORS(app, supports_credentials=True, origins=[FRONTEND_ORIGIN])
+    #CORS(app, supports_credentials=True, origins=[FRONTEND_ORIGIN])
+    CORS(app, supports_credentials=True)
     db.init_app(app)
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
