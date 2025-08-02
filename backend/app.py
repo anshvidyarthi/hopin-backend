@@ -13,6 +13,7 @@ from backend.socket_handlers import socketio
 
 def create_app():
     app = Flask(__name__)
+    app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
     app.config.from_object('backend.config.Config')
     socketio.init_app(app)
     socketio.run(app, debug=True)

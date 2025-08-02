@@ -1,6 +1,8 @@
 from flask import Blueprint, jsonify, request, g
 from ..auth.utils import token_required
 from ..models import db, Profile
+from .driver import is_verified_driver
+from ..user.upload_image import upload_profile_photo_to_s3
 
 user_bp = Blueprint("user", __name__, url_prefix="/user")
 
@@ -16,7 +18,7 @@ def get_profile():
         "photo": profile.photo,
         "rating": profile.rating,
         "total_rides": profile.total_rides,
-        "is_driver": profile.is_driver,
+        "is_driver": is_verified_driver(profile),
         "phone": profile.phone,
         "created_at": profile.created_at.isoformat(),
         "updated_at": profile.updated_at.isoformat() if profile.updated_at else None
@@ -28,9 +30,17 @@ def update_profile():
     profile = g.current_user
     user = profile.user  # access the related User object
 
-    data = request.get_json()
+    # Support both JSON and multipart/form-data
+    is_json = request.is_json
+    data = request.get_json() if is_json else request.form
 
-    # Fields to update in both Profile and User if provided
+    # Handle photo file
+    photo_file = request.files.get("photo")
+    if photo_file:
+        photo_url = upload_profile_photo_to_s3(photo_file, photo_file.filename, profile.id, profile.name)
+        profile.photo = photo_url
+
+    # Fields to update in both Profile and User
     shared_fields = ["name", "email"]
     for field in shared_fields:
         if field in data:
@@ -38,7 +48,7 @@ def update_profile():
             setattr(user, field, data[field])
 
     # Fields only in Profile
-    for field in ["photo", "rating", "total_rides", "is_driver", "phone"]:
+    for field in ["phone", "rating", "total_rides"]:
         if field in data:
             setattr(profile, field, data[field])
 

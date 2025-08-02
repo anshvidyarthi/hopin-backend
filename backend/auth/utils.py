@@ -5,11 +5,11 @@ import uuid
 from flask import jsonify, request, g
 from functools import wraps
 from dotenv import load_dotenv
-from ..models import db, Session, User, Profile
+from ..models import db, Profile
 
 load_dotenv()
 JWT_SECRET = os.getenv('JWT_SECRET')
-JWT_EXP_DELTA_SECONDS = 3600  # 1 hour
+JWT_EXP_DELTA_SECONDS = 60 * 60 * 24 * 30 #1 month
 
 
 def generate_access_token(profile_id):
@@ -21,29 +21,16 @@ def generate_access_token(profile_id):
     return token
 
 
-def create_auth_tokens(user):
+def create_auth_token(user):
     profile = user.profile
     access_token = generate_access_token(profile.id)
-    refresh_token = str(uuid.uuid4())
-
-    session = Session(
-        user_id=user.id,
-        refresh_token=refresh_token,
-        expires_at=datetime.datetime.utcnow() + datetime.timedelta(days=30),
-        user_agent=request.headers.get('User-Agent'),
-        ip_address=request.remote_addr
-    )
-    db.session.add(session)
-    db.session.commit()
-
-    return access_token, refresh_token
-
+    return access_token
 
 def generate_auth_response(user, profile=None):
     if not profile:
         profile = user.profile
 
-    access_token, refresh_token = create_auth_tokens(user)
+    access_token = create_auth_token(user)
 
     response_body = {
         "access_token": access_token,
@@ -56,15 +43,7 @@ def generate_auth_response(user, profile=None):
         }
     }
 
-    response = jsonify(response_body)
-    response.set_cookie(
-        "refresh_token",
-        refresh_token,
-        httponly=True,
-        samesite="None",
-        secure=True
-    )
-    return response
+    return jsonify(response_body)
 
 
 def verify_jwt_token_for_socket(token):

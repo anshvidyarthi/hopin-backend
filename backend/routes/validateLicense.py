@@ -1,3 +1,4 @@
+from datetime import datetime
 from flask import Blueprint, request, jsonify, g
 from ..auth.utils import token_required
 from ..models import db, License, Profile
@@ -19,6 +20,7 @@ def validate_license():
 
     profile = g.current_user
 
+    # Upload to S3 and analyze
     s3_url = upload_license_to_s3(file, file.filename, profile_id=profile.id, user_name=profile.name)
     bucket = os.getenv("S3_LICENSES_BUCKET_NAME")
     key = s3_url.split(f"{bucket}.s3.amazonaws.com/")[-1]
@@ -33,22 +35,36 @@ def validate_license():
             "error": f"Name mismatch. License name '{validation['name']}' does not match account name '{profile.name}'."
         }), 400
 
-    license = License(
-        profile_id=profile.id,
-        license_number=validation["license_number"],
-        full_name=validation["name"],
-        document_url=s3_url,
-        expiration_date=validation["expiration_date"],
-        validated=True
-    )
-    db.session.add(license)
+    # Determine status based on expiration
+    expiration = validation["expiration_date"]
+    now = datetime.utcnow()
+    status = "VERIFIED" if expiration and expiration > now else "EXPIRED"
 
-    profile.is_driver = True
+    # Create or update license
+    license = License.query.filter_by(profile_id=profile.id).first()
+    if not license:
+        license = License(profile_id=profile.id)
+        db.session.add(license)
+
+    license.license_number = validation["license_number"]
+    license.full_name = validation["name"]
+    license.document_url = s3_url
+    license.expiration_date = expiration
+    license.validated = True
+    license.status = status
+
     db.session.commit()
 
-    return jsonify({
-        "message": "License validated and stored. Driver status updated.",
+    response_data = {
         "photo_url": s3_url,
         "license_number": validation["license_number"],
-        "name": validation["name"]
-    })
+        "name": validation["name"],
+        "status": status,
+    }
+
+    if status == "VERIFIED":
+        response_data["message"] = "License validated successfully. You are now a verified driver."
+    else:
+        response_data["message"] = "License uploaded but is expired or invalid for driver verification."
+
+    return jsonify(response_data)
