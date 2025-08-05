@@ -35,7 +35,7 @@ def serialize_search_ride(ride: Ride, me_profile_id: str):
             "id": ride.driver_profile.id,
             "name": ride.driver_profile.name,
             "photo": ride.driver_profile.photo,
-            "rating": ride.driver_profile.rating,
+            "rating": ride.driver_profile.driver_rating,
             "total_rides": ride.driver_profile.total_rides,
         },
         "driver_id": ride.driver_id,

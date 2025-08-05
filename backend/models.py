@@ -23,7 +23,8 @@ class Profile(db.Model):
     name = db.Column(db.String(120), nullable=False)
     email = db.Column(db.String(120), nullable=False)
     photo = db.Column(db.Text, nullable=True)
-    rating = db.Column(db.Float, default=0.0)
+    driver_rating = db.Column(db.Float, default=0.0)
+    rider_rating = db.Column(db.Float, default=0.0)
     total_rides = db.Column(db.Integer, default=0)
     phone = db.Column(db.String(20), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -102,3 +103,23 @@ class License(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     profile = db.relationship("Profile", backref="license", uselist=False)
+
+class Review(db.Model):
+    __tablename__ = "reviews"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    reviewer_id = db.Column(db.String(36), db.ForeignKey("profiles.id"), nullable=False)
+    reviewee_id = db.Column(db.String(36), db.ForeignKey("profiles.id"), nullable=False)
+    ride_id = db.Column(db.String(36), db.ForeignKey("rides.id"), nullable=True)
+
+    rating = db.Column(db.Integer, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    role = db.Column(db.String(10), nullable=False)  # "driver" or "rider"
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    reviewer = db.relationship("Profile", foreign_keys=[reviewer_id], backref="written_reviews")
+    reviewee = db.relationship("Profile", foreign_keys=[reviewee_id], backref="received_reviews")
+    ride = db.relationship("Ride", backref="reviews")

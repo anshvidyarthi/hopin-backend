@@ -3,6 +3,7 @@ from ..auth.utils import token_required
 from ..models import db, Profile
 from .driver import is_verified_driver
 from ..user.upload_image import upload_profile_photo_to_s3
+from ..user.computeProfileRating import compute_average_rating
 
 user_bp = Blueprint("user", __name__, url_prefix="/user")
 
@@ -16,7 +17,8 @@ def get_profile():
         "name": profile.name,
         "email": profile.email,
         "photo": profile.photo,
-        "rating": profile.rating,
+        "driver_rating": compute_average_rating(profile.id, "driver"),
+        "rider_rating": compute_average_rating(profile.id, "rider"),
         "total_rides": profile.total_rides,
         "is_driver": is_verified_driver(profile),
         "phone": profile.phone,
@@ -47,11 +49,29 @@ def update_profile():
             setattr(profile, field, data[field])
             setattr(user, field, data[field])
 
-    # Fields only in Profile
-    for field in ["phone", "rating", "total_rides"]:
+    # Fields only in Profile (excluding 'rating(s)' which should be computed)
+    for field in ["phone", "total_rides"]:
         if field in data:
             setattr(profile, field, data[field])
 
     db.session.commit()
 
     return jsonify({"message": "Profile and user updated successfully"})
+
+@user_bp.route("/public/<profile_id>", methods=["GET"])
+@token_required
+def get_public_profile(profile_id):
+    profile = Profile.query.get(profile_id)
+    if not profile:
+        return jsonify({"error": "Profile not found"}), 404
+
+    return jsonify({
+        "id": profile.id,
+        "name": profile.name,
+        "photo": profile.photo,
+        "driver_rating": compute_average_rating(profile.id, "driver"),
+        "rider_rating": compute_average_rating(profile.id, "rider"),
+        "total_rides": profile.total_rides,
+        "is_driver": is_verified_driver(profile),
+        "created_at": profile.created_at.isoformat(),
+    })

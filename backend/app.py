@@ -7,6 +7,7 @@ from .routes.riders import rider_bp
 from .routes.driver import driver_bp
 from .routes.validateLicense import validate_bp
 from .routes.messages import messages_bp
+from .routes.reviews import review_bp
 import os
 from backend.config import Config
 from backend.socket_handlers import socketio
@@ -30,5 +31,6 @@ def create_app():
     app.register_blueprint(driver_bp, url_prefix='/driver')
     app.register_blueprint(messages_bp, url_prefix='/messages')
     app.register_blueprint(validate_bp, url_prefix='/validate')
+    app.register_blueprint(review_bp, url_prefix='/reviews')
 
     return app
