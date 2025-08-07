@@ -15,15 +15,15 @@ from backend.socket_handlers import socketio
 def create_app():
     app = Flask(__name__)
     app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
-    app.config.from_object('backend.config.Config')
-    socketio.init_app(app)
-    socketio.run(app, debug=True)
-
-    FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://127.0.0.1:8080")
-
-    #CORS(app, supports_credentials=True, origins=[FRONTEND_ORIGIN])
-    CORS(app, supports_credentials=True)
+    app.config.from_object(Config)
     db.init_app(app)
+
+    socketio.init_app(
+        app,
+        cors_allowed_origins="*",      # ← allow every origin
+        cors_credentials=True,
+    )
+    CORS(app, supports_credentials=True, origins="*")
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(user_bp, url_prefix='/user')
