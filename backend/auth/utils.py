@@ -6,6 +6,7 @@ from flask import jsonify, request, g
 from functools import wraps
 from dotenv import load_dotenv
 from ..models import db, Profile
+from sqlalchemy.exc import SQLAlchemyError
 
 load_dotenv()
 JWT_SECRET = os.getenv('JWT_SECRET')
@@ -61,25 +62,44 @@ def verify_jwt_token_for_socket(token):
     return None
 
 
+JWT_ALGOS = ["HS256"]
+
+def _unauthorized(msg: str, code: str = "invalid_token", status: int = 401):
+    resp = jsonify({"error": msg, "code": code})
+    resp.status_code = status
+    resp.headers["WWW-Authenticate"] = f'Bearer error="{code}"'
+    return resp
+
 def token_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            return jsonify({"error": "Missing or invalid Authorization header"}), 401
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            return _unauthorized("Missing or invalid Authorization header", "invalid_request")
 
-        token = auth_header.split(" ")[1]
+        token = auth.split(" ", 1)[1].strip()
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=JWT_ALGOS)
+        except jwt.ExpiredSignatureError:
+            return _unauthorized("Token expired", "token_expired")
+        except jwt.InvalidTokenError:
+            return _unauthorized("Invalid token", "invalid_token")
+
+        profile_id = payload.get("profile_id")
+        if not profile_id:
+            return _unauthorized("Token missing subject", "invalid_token")
 
         try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-            profile = Profile.query.get(payload["profile_id"])
-            if not profile:
-                return jsonify({"error": "User not found"}), 404
-            g.current_user = profile
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token expired"}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({"error": "Invalid token"}), 401
+            # SQLAlchemy 2.x: prefer db.session.get(Model, pk)
+            profile = db.session.get(Profile, profile_id)
+        except SQLAlchemyError:
+            # If the DB is down, say 503—this helps you distinguish infra from auth
+            return jsonify({"error": "Database unavailable"}), 503
 
+        # Treat non-existent / deactivated / soft-deleted as unauthorized
+        if not profile or getattr(profile, "is_deleted", False):
+            return _unauthorized("Unauthorized", "invalid_token")
+
+        g.current_user = profile
         return f(*args, **kwargs)
     return decorated

@@ -2,6 +2,8 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 import uuid
 
+from sqlalchemy import Boolean, text
+
 db = SQLAlchemy()
 
 class User(db.Model):
@@ -27,6 +29,7 @@ class Profile(db.Model):
     rider_rating = db.Column(db.Float, default=0.0)
     total_rides = db.Column(db.Integer, default=0)
     phone = db.Column(db.String(20), nullable=True)
+    is_onboarded = db.Column(Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

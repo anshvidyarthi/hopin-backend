@@ -19,7 +19,6 @@ def login():
 
 @auth_bp.route('/signup', methods=['POST'])
 def signup():
-    print(request)
     email = request.form.get('email')
     if email:
         email = email.strip().lower()
@@ -28,7 +27,6 @@ def signup():
     password = request.form.get('password')
     phone = request.form.get('phone')
     photo_file = request.files.get('photo')
-    print(request)
 
     if not all([email, name, password, phone, photo_file]):
         return jsonify({'error': 'Name, email, password, phone, and photo are required'}), 400
@@ -46,8 +44,6 @@ def signup():
     # Step 2: Pre-generate profile ID (needed for S3 pathing)
     profile_id = str(uuid.uuid4())
 
-    print('came here')
-
     # Step 3: Upload profile photo to S3 using profile_id
     try:
         photo_url = upload_profile_photo_to_s3(photo_file, photo_file.filename, profile_id, name)
@@ -63,7 +59,8 @@ def signup():
         name=name,
         email=email,
         phone=phone,
-        photo=photo_url
+        photo=photo_url,
+        is_onboarded=False
     )
     db.session.add(profile)
     db.session.commit()

@@ -10,8 +10,9 @@ user_bp = Blueprint("user", __name__, url_prefix="/user")
 @user_bp.route("/profile", methods=["GET"])
 @token_required
 def get_profile():
+    print('executed')
     profile = g.current_user
-
+    print(profile)
     return jsonify({
         "id": profile.id,
         "name": profile.name,
@@ -22,6 +23,7 @@ def get_profile():
         "total_rides": profile.total_rides,
         "is_driver": is_verified_driver(profile),
         "phone": profile.phone,
+        "is_onboarded": profile.is_onboarded,
         "created_at": profile.created_at.isoformat(),
         "updated_at": profile.updated_at.isoformat() if profile.updated_at else None
     })
@@ -53,6 +55,20 @@ def update_profile():
     for field in ["phone", "total_rides"]:
         if field in data:
             setattr(profile, field, data[field])
+
+    if "is_onboarded" in data:
+        raw = data["is_onboarded"]
+        # accept bools or strings like "true"/"false"/"1"/"0"
+        if isinstance(raw, str):
+            v = raw.strip().lower()
+            val = v in ("true", "1", "yes", "y", "on")
+        else:
+            val = bool(raw)
+
+        # Optional: only allow setting to True via this endpoint
+        if val and not profile.is_onboarded:
+            profile.is_onboarded = True
+        # else: ignore attempts to unset, or raise 400 if you prefer
 
     db.session.commit()
 
