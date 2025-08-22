@@ -67,6 +67,15 @@ def signup():
 
     return generate_auth_response(user, profile)
 
+@auth_bp.route("/logout", methods=["POST"])
+@token_required
+def logout():
+    """
+    Logout endpoint - currently stateless since we use JWTs.
+    In the future, this could invalidate tokens in a blacklist or Redis cache.
+    """
+    return jsonify({"message": "Logged out successfully"}), 200
+
 @auth_bp.route("/delete", methods=["DELETE"])
 @token_required
 def delete_account():
