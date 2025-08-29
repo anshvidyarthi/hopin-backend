@@ -44,6 +44,35 @@ def offer_ride():
     return jsonify({"message": "Ride offered successfully", "ride_id": ride.id}), 201
 
 
+@driver_bp.route("/ride/<ride_id>/details", methods=["GET"])
+@token_required
+def get_ride_details(ride_id):
+    profile = g.current_user
+    
+    if not is_verified_driver(profile):
+        return jsonify({"error": "Only verified drivers can view rides"}), 403
+        
+    ride = Ride.query.filter_by(id=ride_id, driver_id=profile.id).first()
+    if not ride:
+        return jsonify({"error": "Ride not found"}), 404
+        
+    ride_dict = {
+        "id": ride.id,
+        "start_location": ride.start_location,
+        "start_lat": ride.start_lat,
+        "start_lng": ride.start_lng,
+        "end_location": ride.end_location,
+        "end_lat": ride.end_lat,
+        "end_lng": ride.end_lng,
+        "departure_time": ride.departure_time.isoformat(),
+        "available_seats": ride.available_seats,
+        "price_per_seat": float(ride.price_per_seat),
+        "status": ride.status,
+        "requests": [serialize_ride_request(req) for req in ride.ride_requests],
+    }
+    
+    return jsonify({"ride": ride_dict})
+
 @driver_bp.route("/ride/<ride_id>", methods=["PATCH"])
 @token_required
 def update_ride(ride_id):
