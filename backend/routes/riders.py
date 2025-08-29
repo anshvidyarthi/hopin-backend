@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime
 from sqlalchemy import and_
+from sqlalchemy.orm import joinedload
 from ..models import db, Ride, RideRequest, Message
 from ..auth.utils import token_required
 
@@ -51,19 +52,28 @@ def search_rides():
     profile = g.current_user
     start = request.args.get("from")
     end = request.args.get("to")
+    date_param = request.args.get("date")
 
     if not start or not end:
         return jsonify({"error": "Both 'from' and 'to' parameters are required"}), 400
 
+    # Build base filter conditions with more flexible location matching
+    filter_conditions = [
+        Ride.start_location.ilike(f"%{start}%"),
+        Ride.end_location.ilike(f"%{end}%"),
+        Ride.status.in_(["available", "scheduled"]),
+    ]
+
+    # Always show rides that haven't departed yet (with 30-minute buffer for current rides)
+    from datetime import timedelta
+    current_time = datetime.utcnow() - timedelta(minutes=30)
+    filter_conditions.append(Ride.departure_time >= current_time)
+    
+    # Note: Date parameter is now used only for frontend sorting priority, not backend filtering
+    # This allows showing all available rides with date-based priority sorting
+
     rides = (
-        Ride.query.filter(
-            and_(
-                Ride.departure_time > datetime.utcnow(),
-                Ride.start_location.ilike(f"%{start}%"),
-                Ride.end_location.ilike(f"%{end}%"),
-                Ride.status.in_(["available", "scheduled"]),
-            )
-        )
+        Ride.query.filter(and_(*filter_conditions))
         .order_by(Ride.departure_time.asc())
         .all()
     )
@@ -126,36 +136,43 @@ def my_pending_rides():
 def my_ride_requests():
     profile = g.current_user
 
-    pending_requests = RideRequest.query.filter(
+    pending_requests = RideRequest.query.options(
+        joinedload(RideRequest.ride).joinedload(Ride.driver_profile)
+    ).filter(
         RideRequest.rider_id == profile.id,
     ).all()
 
     requests = []
     for req in pending_requests:
         ride = req.ride
-        requests.append(
-            {
-                "request_id": req.id,
-                "ride_id": ride.id,
-                "start_location": ride.start_location,
-                "end_location": ride.end_location,
-                "departure_time": ride.departure_time.isoformat(),
-                "status": req.status,
-                "driver_name": ride.driver_profile.name,
-                "pickup": serialize_point(
-                    req.use_driver_pickup,
-                    req.rider_pickup_location,
-                    req.rider_pickup_lat,
-                    req.rider_pickup_lng,
-                ),
-                "dropoff": serialize_point(
-                    req.use_driver_dropoff,
-                    req.rider_dropoff_location,
-                    req.rider_dropoff_lat,
-                    req.rider_dropoff_lng,
-                ),
-            }
-        )
+        
+        # Handle potential None values
+        price_per_seat = float(ride.price_per_seat) if ride.price_per_seat is not None else 0.0
+        available_seats = ride.available_seats if ride.available_seats is not None else 0
+        
+        requests.append({
+            "request_id": req.id,
+            "ride_id": ride.id,
+            "start_location": ride.start_location,
+            "end_location": ride.end_location,
+            "departure_time": ride.departure_time.isoformat(),
+            "status": req.status,
+            "driver_name": ride.driver_profile.name,
+            "price_per_seat": price_per_seat,
+            "available_seats": available_seats,
+            "pickup": serialize_point(
+                req.use_driver_pickup,
+                req.rider_pickup_location,
+                req.rider_pickup_lat,
+                req.rider_pickup_lng,
+            ),
+            "dropoff": serialize_point(
+                req.use_driver_dropoff,
+                req.rider_dropoff_location,
+                req.rider_dropoff_lat,
+                req.rider_dropoff_lng,
+            ),
+        })
 
     return jsonify({"requests": requests})
 
