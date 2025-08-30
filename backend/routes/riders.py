@@ -150,6 +150,7 @@ def my_ride_requests():
         price_per_seat = float(ride.price_per_seat) if ride.price_per_seat is not None else 0.0
         available_seats = ride.available_seats if ride.available_seats is not None else 0
         
+        
         requests.append({
             "request_id": req.id,
             "ride_id": ride.id,
@@ -158,6 +159,9 @@ def my_ride_requests():
             "departure_time": ride.departure_time.isoformat(),
             "status": req.status,
             "driver_name": ride.driver_profile.name,
+            "driver_photo": ride.driver_profile.photo if ride.driver_profile.photo else None,
+            "driver_rating": float(ride.driver_profile.driver_rating) if ride.driver_profile.driver_rating is not None else 0.0,
+            "driver_total_rides": ride.driver_profile.total_rides if ride.driver_profile.total_rides is not None else 0,
             "price_per_seat": price_per_seat,
             "available_seats": available_seats,
             "pickup": serialize_point(
