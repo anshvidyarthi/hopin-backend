@@ -78,10 +78,7 @@ def get_conversations():
         Ride, Ride.id == subq.c.ride_id
     ).outerjoin(
         RideRequest,
-        and_(
-            RideRequest.rider_id == current_profile_id,
-            RideRequest.ride_id == subq.c.ride_id
-        )
+        RideRequest.ride_id == subq.c.ride_id
     ).join(
         M,
         and_(
@@ -119,7 +116,7 @@ def get_conversations():
                 "timestamp": last_time.isoformat(),
                 "senderId": sender_id
             },
-            "status": request_status or "none"
+            "status": request_status if request_status else "pending"
         })
 
     return jsonify(conversations)
