@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timedelta
 from sqlalchemy import and_, or_, text, func
 from sqlalchemy.orm import joinedload
-from ..models import db, Ride, RideRequest, Message
+from ..models import db, Ride, RideRequest, Message, Profile
 from ..auth.utils import token_required
 from ..utils.geospatial import haversine_distance
 from ..utils.location_resolver import resolve_location_aliases
@@ -400,3 +400,73 @@ def send_ride_request():
     db.session.commit()
 
     return jsonify({"message": "Ride request sent", "request_id": req.id}), 201
+
+
+@rider_bp.route("/ride/<ride_id>/details", methods=["GET"])
+@token_required
+def get_ride_details(ride_id):
+    """Get detailed information about a specific ride"""
+    profile = g.current_user
+    
+    # Get the ride
+    ride = Ride.query.filter_by(id=ride_id).first()
+    if not ride:
+        return jsonify({"error": "Ride not found"}), 404
+    
+    # Get driver information
+    driver_profile = Profile.query.filter_by(id=ride.driver_id).first()
+    if not driver_profile:
+        return jsonify({"error": "Driver profile not found"}), 404
+    
+    # Check if current user has any requests for this ride
+    user_request = RideRequest.query.filter_by(
+        rider_id=profile.id,
+        ride_id=ride.id
+    ).first()
+    
+    # Get user's request status
+    user_request_status = user_request.status if user_request else None
+    
+    return jsonify({
+        "ride": {
+            "id": ride.id,
+            "driver_id": ride.driver_id,
+            "start_location": ride.start_location,
+            "end_location": ride.end_location,
+            "departure_time": ride.departure_time.isoformat(),
+            "available_seats": ride.available_seats,
+            "price_per_seat": float(ride.price_per_seat) if ride.price_per_seat else 0,
+            "status": ride.status,
+            "start_lat": ride.start_lat,
+            "start_lng": ride.start_lng,
+            "end_lat": ride.end_lat,
+            "end_lng": ride.end_lng,
+            "created_at": ride.created_at.isoformat(),
+        },
+        "driver": {
+            "id": driver_profile.id,
+            "name": driver_profile.name,
+            "photo": driver_profile.photo,
+            "rating": driver_profile.driver_rating,
+            "total_rides": driver_profile.total_rides,
+            "phone": driver_profile.phone if user_request_status == "accepted" else None,  # Only show phone if request accepted
+        },
+        "user_request": {
+            "id": user_request.id if user_request else None,
+            "status": user_request_status,
+            "message": user_request.message if user_request else None,
+            "created_at": user_request.created_at.isoformat() if user_request else None,
+            "pickup": {
+                "use_driver": user_request.use_driver_pickup if user_request else None,
+                "location": user_request.rider_pickup_location if user_request else None,
+                "lat": user_request.rider_pickup_lat if user_request else None,
+                "lng": user_request.rider_pickup_lng if user_request else None,
+            } if user_request else None,
+            "dropoff": {
+                "use_driver": user_request.use_driver_dropoff if user_request else None,
+                "location": user_request.rider_dropoff_location if user_request else None,
+                "lat": user_request.rider_dropoff_lat if user_request else None,
+                "lng": user_request.rider_dropoff_lng if user_request else None,
+            } if user_request else None,
+        } if user_request else None,
+    }), 200
