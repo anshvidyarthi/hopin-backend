@@ -55,6 +55,11 @@ class Ride(db.Model):
     is_fixed_pickup = db.Column(db.Boolean, default=False)
     fixed_pickup_location = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default="scheduled")
+    
+    # Search optimization fields
+    popularity_score = db.Column(db.Float, default=0.0)
+    search_vector = db.Column(db.Text, nullable=True)  # For full-text search
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -126,3 +131,53 @@ class Review(db.Model):
     reviewer = db.relationship("Profile", foreign_keys=[reviewer_id], backref="written_reviews")
     reviewee = db.relationship("Profile", foreign_keys=[reviewee_id], backref="received_reviews")
     ride = db.relationship("Ride", backref="reviews")
+
+class LocationAlias(db.Model):
+    __tablename__ = "location_aliases"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    canonical_name = db.Column(db.String(255), nullable=False)
+    alias_name = db.Column(db.String(255), nullable=False)
+    lat = db.Column(db.Float, nullable=True)
+    lng = db.Column(db.Float, nullable=True)
+    popularity = db.Column(db.Integer, default=0)
+    city = db.Column(db.String(100), nullable=True)
+    state = db.Column(db.String(50), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SearchHistory(db.Model):
+    __tablename__ = "search_history"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("profiles.id"), nullable=True)
+    from_location = db.Column(db.String(255), nullable=False)
+    to_location = db.Column(db.String(255), nullable=False)
+    from_lat = db.Column(db.Float, nullable=True)
+    from_lng = db.Column(db.Float, nullable=True)
+    to_lat = db.Column(db.Float, nullable=True)
+    to_lng = db.Column(db.Float, nullable=True)
+    search_count = db.Column(db.Integer, default=1)
+    results_count = db.Column(db.Integer, default=0)
+    last_searched = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationship
+    user = db.relationship("Profile", backref="search_history")
+
+class PopularRoute(db.Model):
+    __tablename__ = "popular_routes"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    from_location = db.Column(db.String(255), nullable=False)
+    to_location = db.Column(db.String(255), nullable=False)
+    from_lat = db.Column(db.Float, nullable=True)
+    from_lng = db.Column(db.Float, nullable=True)
+    to_lat = db.Column(db.Float, nullable=True)
+    to_lng = db.Column(db.Float, nullable=True)
+    search_count = db.Column(db.Integer, default=1)
+    ride_count = db.Column(db.Integer, default=0)
+    avg_price = db.Column(db.Numeric, nullable=True)
+    popularity_score = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
