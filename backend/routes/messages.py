@@ -106,6 +106,18 @@ def get_conversations():
                 "photo": other_user.photo
             },
             "rideId": ride_id,
+            "ride": {
+                "id": ride_id,
+                "departure_time": ride.departure_time.isoformat(),
+                "start_location": ride.start_location,
+                "end_location": ride.end_location,
+                "start_lat": ride.start_lat,
+                "start_lng": ride.start_lng,
+                "end_lat": ride.end_lat,
+                "end_lng": ride.end_lng,
+                "price_per_seat": float(ride.price_per_seat) if ride.price_per_seat else 0,
+                "available_seats": ride.available_seats,
+            },
             "rideDetails": {
                 "route": f"{ride.start_location} → {ride.end_location}",
                 "date": ride.departure_time.strftime("%Y-%m-%d"),
