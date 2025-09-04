@@ -9,6 +9,7 @@ from .routes.validateLicense import validate_bp
 from .routes.messages import messages_bp
 from .routes.reviews import review_bp
 from .routes.smart_features import smart_bp
+from .routes.notifications import notifications_bp
 import os
 from backend.config import Config
 from backend.socket_handlers import socketio
@@ -34,5 +35,6 @@ def create_app():
     app.register_blueprint(validate_bp, url_prefix='/validate')
     app.register_blueprint(review_bp, url_prefix='/reviews')
     app.register_blueprint(smart_bp, url_prefix='/smart')
+    app.register_blueprint(notifications_bp, url_prefix='/notifications')
 
     return app

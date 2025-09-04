@@ -4,6 +4,7 @@ from datetime import datetime
 from ..models import db, Ride, RideRequest
 from ..auth.utils import token_required
 from ..driver.utils import validate_ride_payload, serialize_ride_request
+from ..services.notifications import NotificationService
 
 driver_bp = Blueprint("driver", __name__, url_prefix="/driver")
 
@@ -157,6 +158,10 @@ def accept_ride_request(request_id):
 
     req.status = "accepted"
     db.session.commit()
+    
+    # Send notification to rider
+    NotificationService.ride_request_accepted(req.rider_id, req, profile, req.ride)
+    
     return jsonify({"message": "Ride request accepted"})
 
 
@@ -177,6 +182,10 @@ def reject_ride_request(request_id):
 
     req.status = "rejected"
     db.session.commit()
+    
+    # Send notification to rider
+    NotificationService.ride_request_declined(req.rider_id, req, profile)
+    
     return jsonify({"message": "Ride request rejected"})
 
 def is_verified_driver(profile):

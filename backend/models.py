@@ -112,6 +112,40 @@ class License(db.Model):
 
     profile = db.relationship("Profile", backref="license", uselist=False)
 
+class Notification(db.Model):
+    __tablename__ = "notifications"
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey("profiles.id"), nullable=False)
+    
+    # Notification metadata
+    type = db.Column(db.String(50), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    body = db.Column(db.Text, nullable=False)
+    
+    # Related entity IDs for navigation
+    ride_id = db.Column(db.String(36), db.ForeignKey("rides.id"), nullable=True)
+    request_id = db.Column(db.String(36), db.ForeignKey("ride_requests.id"), nullable=True)
+    message_id = db.Column(db.String(36), db.ForeignKey("messages.id"), nullable=True)
+    other_user_id = db.Column(db.String(36), db.ForeignKey("profiles.id"), nullable=True)
+    
+    # Action/navigation data as JSON
+    action_data = db.Column(db.JSON, nullable=True)
+    
+    # Status tracking
+    read = db.Column(db.Boolean, default=False)
+    delivered = db.Column(db.Boolean, default=False)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    read_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    user = db.relationship("Profile", foreign_keys=[user_id], backref="notifications")
+    ride = db.relationship("Ride", foreign_keys=[ride_id])
+    request = db.relationship("RideRequest", foreign_keys=[request_id])
+    message = db.relationship("Message", foreign_keys=[message_id])
+    other_user = db.relationship("Profile", foreign_keys=[other_user_id])
+
 class Review(db.Model):
     __tablename__ = "reviews"
 

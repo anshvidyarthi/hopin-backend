@@ -9,6 +9,7 @@ from ..utils.location_resolver import resolve_location_aliases
 from ..utils.search_engine import calculate_ride_relevance, sort_rides_by_criteria, build_search_suggestions
 from ..utils.analytics import log_search_analytics
 from ..utils.serializers import serialize_point, serialize_search_ride, serialize_search_response
+from ..services.notifications import NotificationService
 
 rider_bp = Blueprint("rider", __name__, url_prefix="/rider")
 
@@ -398,6 +399,9 @@ def send_ride_request():
         db.session.add(msg)
 
     db.session.commit()
+
+    # Send notification to driver
+    NotificationService.ride_request_received(ride.driver_id, req, profile)
 
     return jsonify({"message": "Ride request sent", "request_id": req.id}), 201
 
