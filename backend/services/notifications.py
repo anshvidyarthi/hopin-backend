@@ -1,13 +1,63 @@
 from backend.socket_handlers import send_notification_to_user
 from backend.models import Profile, Ride, RideRequest, Message
+from typing import Dict, Any, Optional
 
 class NotificationService:
-    """Service class for sending different types of notifications"""
+    """
+    Service class for sending different types of notifications
+    
+    To add a new notification type:
+    1. Add the type to NOTIFICATION_TYPES
+    2. Add a new @staticmethod method following the naming pattern
+    3. Use _send_notification() helper for consistent delivery
+    4. Define the notification_type, title, body, and action_data
+    """
+    
+    # All supported notification types
+    NOTIFICATION_TYPES = {
+        'ride_request_received',
+        'ride_request_accepted', 
+        'ride_request_declined',
+        'new_message',
+        'ride_cancelled',
+        'ride_starting_soon',
+        'driver_arriving',
+        'license_verification_complete'
+    }
+    
+    @staticmethod
+    def _send_notification(
+        user_id: str,
+        notification_type: str,
+        title: str,
+        body: str,
+        action_data: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ):
+        """
+        Internal helper for sending notifications with consistent parameters
+        
+        Args:
+            user_id: Target user ID
+            notification_type: Type identifier (e.g., 'ride_request_received')
+            title: Notification title
+            body: Notification body text
+            action_data: Navigation/action data for deep linking
+            **kwargs: Additional fields (ride_id, request_id, message_id, etc.)
+        """
+        return send_notification_to_user(
+            user_id=user_id,
+            notification_type=notification_type,
+            title=title,
+            body=body,
+            action_data=action_data or {},
+            **kwargs
+        )
     
     @staticmethod
     def ride_request_received(driver_id: str, request: RideRequest, rider: Profile):
         """Notify driver of new ride request"""
-        return send_notification_to_user(
+        return NotificationService._send_notification(
             user_id=driver_id,
             notification_type="ride_request_received",
             title="New Ride Request",

@@ -10,6 +10,26 @@ socketio = SocketIO(cors_allowed_origins="*")
 # Maps Socket IDs to user IDs for easy lookup
 socket_user_map = {}
 
+def emit_message_to_conversation(message, ride_id, sender_id, receiver_id):
+    """
+    Send a message through WebSocket to the conversation room
+    Used by both socket handlers and API endpoints
+    """
+    # Construct conversation room name
+    room = f"conversation:{ride_id}:{min(sender_id, receiver_id)}:{max(sender_id, receiver_id)}"
+    
+    # Emit to all participants in room
+    payload = {
+        "id": message.id,
+        "sender_id": sender_id,
+        "receiver_id": receiver_id,
+        "ride_id": ride_id,
+        "content": message.content,
+        "created_at": message.created_at.isoformat()
+    }
+    socketio.emit("receive_message", payload, room=room)
+    return payload
+
 @socketio.on("connect")
 def handle_connect(auth):
     token = auth.get("token") if auth else None
@@ -65,19 +85,8 @@ def handle_send_message(data):
     db.session.add(message)
     db.session.commit()
 
-    # Construct conversation room name
-    room = f"conversation:{ride_id}:{min(sender_id, receiver_id)}:{max(sender_id, receiver_id)}"
-
-    # Emit to all participants in room
-    payload = {
-        "id": message.id,
-        "sender_id": sender_id,
-        "receiver_id": receiver_id,
-        "ride_id": ride_id,
-        "content": content,
-        "created_at": message.created_at.isoformat()
-    }
-    emit("receive_message", payload, room=room)
+    # Send message through WebSocket
+    payload = emit_message_to_conversation(message, ride_id, sender_id, receiver_id)
 
     # Send notification to receiver (import here to avoid circular import)
     try:

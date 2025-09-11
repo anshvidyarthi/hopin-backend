@@ -400,6 +400,11 @@ def send_ride_request():
 
     db.session.commit()
 
+    # Send initial message through WebSocket if provided
+    if initial_msg:
+        from backend.socket_handlers import emit_message_to_conversation
+        emit_message_to_conversation(msg, ride.id, profile.id, ride.driver_id)
+
     # Send notification to driver
     NotificationService.ride_request_received(ride.driver_id, req, profile)
 
