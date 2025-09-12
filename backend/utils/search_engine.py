@@ -55,29 +55,6 @@ def calculate_ride_relevance(ride, search_params):
     return round(score, 2)
 
 
-def calculate_popularity_boost(ride):
-    """Calculate popularity boost based on ride characteristics"""
-    boost = 0.0
-    
-    # High-rated driver boost
-    if ride.driver_profile and ride.driver_profile.driver_rating >= 4.5:
-        boost += 10.0
-    
-    # Experienced driver boost
-    if ride.driver_profile and ride.driver_profile.total_rides >= 50:
-        boost += 5.0
-    
-    # Recent ride boost (posted within last 24 hours)
-    if ride.created_at:
-        hours_since_created = (datetime.utcnow() - ride.created_at).total_seconds() / 3600
-        if hours_since_created <= 24:
-            boost += 5.0
-    
-    # Multiple seats available boost
-    if ride.available_seats >= 3:
-        boost += 3.0
-    
-    return boost
 
 
 def sort_rides_by_criteria(rides_with_scores, sort_by, search_params=None):

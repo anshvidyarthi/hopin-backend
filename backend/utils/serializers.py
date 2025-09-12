@@ -69,6 +69,7 @@ def serialize_search_ride(ride, me_profile_id, search_params=None):
         result["relevance_score"] = calculate_ride_relevance(ride, search_params)
         if distance is not None:
             result["distance_km"] = round(distance, 1)
+            result["distance_miles"] = round(distance / 1.609344, 1)  # Convert km to miles
     
     return result
 

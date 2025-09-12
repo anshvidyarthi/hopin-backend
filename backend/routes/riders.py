@@ -14,39 +14,6 @@ from ..services.notifications import NotificationService
 rider_bp = Blueprint("rider", __name__, url_prefix="/rider")
 
 
-@rider_bp.route("/search_rides", methods=["GET"])
-@token_required
-def search_rides():
-    profile = g.current_user
-    start = request.args.get("from")
-    end = request.args.get("to")
-    date_param = request.args.get("date")
-
-    if not start or not end:
-        return jsonify({"error": "Both 'from' and 'to' parameters are required"}), 400
-
-    # Build base filter conditions with more flexible location matching
-    filter_conditions = [
-        Ride.start_location.ilike(f"%{start}%"),
-        Ride.end_location.ilike(f"%{end}%"),
-        Ride.status.in_(["available", "scheduled"]),
-    ]
-
-    # Always show rides that haven't departed yet (with 30-minute buffer for current rides)
-    current_time = datetime.utcnow() - timedelta(minutes=30)
-    filter_conditions.append(Ride.departure_time >= current_time)
-    
-    # Note: Date parameter is now used only for frontend sorting priority, not backend filtering
-    # This allows showing all available rides with date-based priority sorting
-
-    rides = (
-        Ride.query.filter(and_(*filter_conditions))
-        .order_by(Ride.departure_time.asc())
-        .all()
-    )
-
-    results = [serialize_search_ride(r, profile.id) for r in rides]
-    return jsonify({"rides": results})
 
 
 @rider_bp.route("/search_rides/advanced", methods=["POST"])
@@ -72,14 +39,20 @@ def advanced_search_rides():
         'to_lat': data.get('to_lat'),
         'to_lng': data.get('to_lng'),
         'date': data.get('date'),
-        'max_distance': data.get('max_distance', 50),  # km
+        'max_distance': data.get('max_distance', 25),  # miles (converted from km later)
         'max_price': data.get('max_price'),
         'min_seats': data.get('min_seats', 1),
-        'sort_by': data.get('sort_by', 'relevance'),  # relevance, distance, price, departure_time, popularity
+        'sort_by': data.get('sort_by', 'relevance'),  # relevance, distance, price, departure_time
         'limit': min(data.get('limit', 50), 100),  # Max 100 results
         'use_full_text': data.get('use_full_text', True),
         'resolve_aliases': data.get('resolve_aliases', True)
     }
+    
+    # Convert miles to km for internal calculations
+    if search_params['max_distance']:
+        search_params['max_distance_km'] = search_params['max_distance'] * 1.609344
+    else:
+        search_params['max_distance_km'] = 40.234  # 25 miles default
     
     # Resolve location aliases if enabled
     from_resolved = None
@@ -123,22 +96,36 @@ def advanced_search_rides():
     if search_params['max_price']:
         filter_conditions.append(Ride.price_per_seat <= search_params['max_price'])
     
-    # Location filtering strategy
+    # Unified location filtering strategy - works for both addresses and general areas
     location_conditions = []
     
     if search_params['use_full_text']:
-        # Full-text search using PostgreSQL tsvector
+        # Full-text search using PostgreSQL - handles both addresses and areas well
         location_conditions.append(
-            text("to_tsvector('english', start_location || ' ' || end_location) @@ plainto_tsquery('english', :from_query)")
+            text("to_tsvector('english', start_location) @@ plainto_tsquery('english', :from_query)")
         )
         location_conditions.append(
-            text("to_tsvector('english', start_location || ' ' || end_location) @@ plainto_tsquery('english', :to_query)")
+            text("to_tsvector('english', end_location) @@ plainto_tsquery('english', :to_query)")
         )
     else:
-        # Fallback to ILIKE pattern matching
+        # Flexible ILIKE matching - handles addresses, cities, and partial matches
+        # Split location into parts for better matching
+        from_parts = [from_location.strip()]
+        to_parts = [to_location.strip()]
+        
+        # Add city part if location contains comma (like "San Luis Obispo, CA")
+        if ',' in from_location:
+            from_parts.append(from_location.split(',')[0].strip())
+        if ',' in to_location:
+            to_parts.append(to_location.split(',')[0].strip())
+            
+        # Create OR conditions for flexible matching
+        from_conditions = [Ride.start_location.ilike(f"%{part}%") for part in from_parts]
+        to_conditions = [Ride.end_location.ilike(f"%{part}%") for part in to_parts]
+        
         location_conditions.extend([
-            Ride.start_location.ilike(f"%{from_location}%"),
-            Ride.end_location.ilike(f"%{to_location}%")
+            or_(*from_conditions),
+            or_(*to_conditions)
         ])
     
     # Build the query
@@ -158,14 +145,14 @@ def advanced_search_rides():
     # Distance filtering if coordinates available
     rides = query.all()
     
-    if search_params['from_lat'] and search_params['from_lng'] and search_params['max_distance']:
+    if search_params['from_lat'] and search_params['from_lng'] and search_params['max_distance_km']:
         rides = [
             ride for ride in rides 
             if ride.start_lat and ride.start_lng and 
             haversine_distance(
                 search_params['from_lat'], search_params['from_lng'],
                 ride.start_lat, ride.start_lng
-            ) <= search_params['max_distance']
+            ) <= search_params['max_distance_km']
         ]
     
     # Calculate relevance scores and sort
