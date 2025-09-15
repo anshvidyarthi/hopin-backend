@@ -10,10 +10,11 @@ def calculate_ride_relevance(ride, search_params):
     """Calculate multi-factor relevance score for a ride"""
     score = 0.0
     weights = search_params.get('weights', {
-        'popularity': 0.3,
-        'distance': 0.25,
-        'driver_rating': 0.2,
-        'price': 0.15,
+        'popularity': 0.25,
+        'distance': 0.2,
+        'driver_rating': 0.15,
+        'price': 0.1,
+        'date_proximity': 0.2,  # New: prioritize dates close to selected date
         'recency': 0.1
     })
     
@@ -43,6 +44,29 @@ def calculate_ride_relevance(ride, search_params):
         price_score = max(0, 100 - (price_ratio * 50))
         score += price_score * weights['price']
     
+    # Date proximity score (closer to selected date = higher score, 0-100)
+    if search_params.get('target_date') and ride.departure_time:
+        target_date = search_params['target_date']
+        ride_date = ride.departure_time
+        
+        # Calculate days difference
+        days_diff = abs((ride_date.date() - target_date.date()).days)
+        
+        if days_diff == 0:
+            # Exact date match gets full points
+            date_proximity_score = 100
+        elif days_diff <= 7:
+            # Within a week - linear decay
+            date_proximity_score = 100 - (days_diff * 12)  # 88, 76, 64, 52, 40, 28, 16
+        elif days_diff <= 30:
+            # Within a month - slower decay
+            date_proximity_score = max(0, 16 - (days_diff - 7) * 0.7)  # 16 down to 0
+        else:
+            # More than a month - minimal score
+            date_proximity_score = 0
+            
+        score += date_proximity_score * weights['date_proximity']
+    
     # Recency score (sooner departure = higher score, 0-100)
     if ride.departure_time > datetime.utcnow():
         hours_until = (ride.departure_time - datetime.utcnow()).total_seconds() / 3600
@@ -67,6 +91,11 @@ def sort_rides_by_criteria(rides_with_scores, sort_by, search_params=None):
         return sorted(rides_with_scores, key=lambda x: float(x['ride'].price_per_seat))
     elif sort_by == 'departure_time':
         return sorted(rides_with_scores, key=lambda x: x['ride'].departure_time)
+    elif sort_by == 'date_proximity' and search_params and search_params.get('target_date'):
+        # Sort by proximity to target date
+        target_date = search_params['target_date']
+        return sorted(rides_with_scores, 
+                     key=lambda x: abs((x['ride'].departure_time.date() - target_date.date()).days))
     elif sort_by == 'popularity':
         return sorted(rides_with_scores, key=lambda x: x['ride'].popularity_score, reverse=True)
     elif sort_by == 'driver_rating':
@@ -74,7 +103,7 @@ def sort_rides_by_criteria(rides_with_scores, sort_by, search_params=None):
                      key=lambda x: x['ride'].driver_profile.driver_rating if x['ride'].driver_profile else 0, 
                      reverse=True)
     else:
-        # Default to relevance
+        # Default to relevance (which now includes date proximity)
         return sorted(rides_with_scores, key=lambda x: x['relevance_score'], reverse=True)
 
 

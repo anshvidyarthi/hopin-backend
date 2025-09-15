@@ -81,16 +81,15 @@ def advanced_search_rides():
     current_time = datetime.utcnow() - timedelta(minutes=30)
     filter_conditions.append(Ride.departure_time >= current_time)
     
-    # Date filter if specified
+    # Date is now used for sorting/prioritization only, not filtering
+    # We still parse it for use in relevance scoring
+    target_date = None
     if search_params['date']:
         try:
             target_date = datetime.fromisoformat(search_params['date'].replace('Z', '+00:00'))
-            start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_of_day = start_of_day + timedelta(days=1)
-            filter_conditions.append(Ride.departure_time >= start_of_day)
-            filter_conditions.append(Ride.departure_time < end_of_day)
+            search_params['target_date'] = target_date
         except ValueError:
-            pass  # Invalid date format, ignore filter
+            pass  # Invalid date format, ignore for sorting
     
     # Price filter
     if search_params['max_price']:

@@ -16,6 +16,7 @@ def serialize_ride_request(req):
         "status": req.status,
         "message": req.message,
         "requested_at": req.created_at.isoformat(),
+        "updated_at": req.updated_at.isoformat() if req.updated_at else None,
         "rider": {
             "id": rider_profile.id,
             "name": rider_profile.name,

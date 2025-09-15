@@ -157,6 +157,7 @@ def accept_ride_request(request_id):
         return jsonify({"error": f"Cannot accept a request in '{req.status}' state"}), 400
 
     req.status = "accepted"
+    req.updated_at = datetime.utcnow()
     db.session.commit()
     
     # Send notification to rider
@@ -181,6 +182,7 @@ def reject_ride_request(request_id):
         return jsonify({"error": f"Cannot reject a request in '{req.status}' state"}), 400
 
     req.status = "rejected"
+    req.updated_at = datetime.utcnow()
     db.session.commit()
     
     # Send notification to rider
