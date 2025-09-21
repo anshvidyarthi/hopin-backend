@@ -16,8 +16,9 @@ class NotificationService:
     # All supported notification types
     NOTIFICATION_TYPES = {
         'ride_request_received',
-        'ride_request_accepted', 
+        'ride_request_accepted',
         'ride_request_declined',
+        'ride_request_canceled',
         'new_message',
         'ride_cancelled',
         'ride_starting_soon',
@@ -191,11 +192,31 @@ class NotificationService:
         )
     
     @staticmethod
+    def ride_request_canceled(driver_id: str, request: RideRequest, rider: Profile, status_text: str):
+        """Notify driver that ride request was canceled/revoked"""
+        return NotificationService._send_notification(
+            user_id=driver_id,
+            notification_type="ride_request_canceled",
+            title=f"Request {status_text.title()}",
+            body=f"{rider.name} {status_text} their ride request",
+            ride_id=request.ride_id,
+            request_id=request.id,
+            other_user_id=rider.id,
+            action_data={
+                "screen": "RideDetails",
+                "params": {
+                    "rideId": request.ride_id,
+                    "mode": "driver"
+                }
+            }
+        )
+
+    @staticmethod
     def license_verification_complete(user_id: str, status: str):
         """Notify driver of license verification result"""
         title = "License Verified" if status == "VERIFIED" else "License Verification Failed"
         body = "You can now offer rides" if status == "VERIFIED" else "Please upload a valid license"
-        
+
         return send_notification_to_user(
             user_id=user_id,
             notification_type="license_verification_complete",

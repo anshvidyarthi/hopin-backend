@@ -96,12 +96,36 @@ def update_ride(ride_id):
         "is_fixed_pickup", "fixed_pickup_location", "status"
     ]
 
+    # Track which location fields are being updated
+    pickup_updated = any(field in data for field in ["start_location", "start_lat", "start_lng"])
+    dropoff_updated = any(field in data for field in ["end_location", "end_lat", "end_lng"])
+
     for field in allowed_fields:
         if field in data:
             if field == "departure_time":
                 setattr(ride, field, datetime.fromisoformat(data[field]))
             else:
                 setattr(ride, field, data[field])
+
+    # Update related ride requests that use driver pickup/dropoff
+    if pickup_updated or dropoff_updated:
+        related_requests = RideRequest.query.filter_by(ride_id=ride_id).all()
+
+        for ride_request in related_requests:
+            # Update pickup info for requests using driver pickup
+            if pickup_updated and ride_request.use_driver_pickup:
+                ride_request.rider_pickup_location = data.get("start_location", ride.start_location)
+                ride_request.rider_pickup_lat = data.get("start_lat", ride.start_lat)
+                ride_request.rider_pickup_lng = data.get("start_lng", ride.start_lng)
+
+            # Update dropoff info for requests using driver dropoff
+            if dropoff_updated and ride_request.use_driver_dropoff:
+                ride_request.rider_dropoff_location = data.get("end_location", ride.end_location)
+                ride_request.rider_dropoff_lat = data.get("end_lat", ride.end_lat)
+                ride_request.rider_dropoff_lng = data.get("end_lng", ride.end_lng)
+
+            # Update the request's updated_at timestamp but preserve status
+            ride_request.updated_at = datetime.utcnow()
 
     db.session.commit()
     return jsonify({"message": "Ride updated successfully"})

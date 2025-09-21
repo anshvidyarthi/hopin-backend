@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timedelta
 from sqlalchemy import and_, or_, text, func
 from sqlalchemy.orm import joinedload
-from ..models import db, Ride, RideRequest, Message, Profile
+from ..models import db, Ride, RideRequest, Message, Profile, Notification
 from ..auth.utils import token_required
 from ..utils.geospatial import haversine_distance
 from ..utils.location_resolver import resolve_location_aliases
@@ -465,3 +465,72 @@ def get_ride_details(ride_id):
             } if user_request else None,
         } if user_request else None,
     }), 200
+
+
+@rider_bp.route("/cancel_request/<request_id>", methods=["DELETE"])
+@token_required
+def cancel_ride_request(request_id):
+    """Cancel a ride request"""
+    profile = g.current_user
+
+    # Get the ride request
+    ride_request = RideRequest.query.filter_by(
+        id=request_id,
+        rider_id=profile.id
+    ).first()
+
+    if not ride_request:
+        return jsonify({"error": "Ride request not found"}), 404
+
+    # Check if request can be canceled
+    if ride_request.status not in ["pending", "accepted"]:
+        return jsonify({"error": "Cannot cancel request with status: " + ride_request.status}), 400
+
+    # Store ride_id and driver_id for notification
+    ride_id = ride_request.ride_id
+    ride = Ride.query.get(ride_id)
+    driver_id = ride.driver_id if ride else None
+
+    # Store request data before deletion for notification
+    request_id = ride_request.id
+    rider_id = ride_request.rider_id
+    status_text = "canceled" if ride_request.status == "accepted" else "revoked"
+
+    # If the request was accepted, increment available seats
+    if ride_request.status == "accepted" and ride:
+        ride.available_seats += 1
+
+        # Update ride status if it was full
+        if ride.status == "full":
+            ride.status = "available"
+
+    # Delete related notifications first to avoid foreign key constraint violation
+    related_notifications = Notification.query.filter_by(request_id=ride_request.id).all()
+    for notification in related_notifications:
+        db.session.delete(notification)
+
+    # Store cancellation message before deleting the request
+    cancel_message = f"I have {status_text} my ride request. Sorry for any inconvenience!"
+
+    # Create automatic cancellation message to driver
+    if ride and driver_id:
+        cancel_msg = Message(
+            ride_id=ride_id,
+            sender_id=profile.id,
+            receiver_id=driver_id,
+            content=cancel_message
+        )
+        db.session.add(cancel_msg)
+
+    # Remove the ride request
+    db.session.delete(ride_request)
+    db.session.commit()
+
+    # Send the cancellation message through WebSocket if ride exists
+    if ride and driver_id:
+        from backend.socket_handlers import emit_message_to_conversation
+        emit_message_to_conversation(cancel_msg, ride_id, profile.id, driver_id)
+
+    # TODO - Send notification to driver if ride exists
+
+    return jsonify({"message": f"Ride request {status_text} successfully"}), 200
